@@ -1,6 +1,7 @@
 package com.example.apk_auto_tempel_srcht
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -11,6 +12,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
+import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -21,6 +23,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import java.io.File
 
 // [FITUR: Panel Melayang Mini ala Game Turbo Redmi & Bypass Clipboard Android 16] - Bilah samping abu-abu auto-hide 1 menit, gelembung bundar melayang, laci antrean berkas yang bisa ditarik ke atas (expandable scroll), dan bypass window overlay
@@ -38,6 +41,10 @@ object JendelaGelembungMelayang {
     private var laciSedangTerbuka = false
     private var laciModePenuh = false
     private var sedangDalamModeBilahSamping = false
+
+    // [FITUR: Status Pemilihan Banyak Gambar]
+    private var modePilihBeberapa = false
+    private val kumpulanJalurTerpilih = mutableSetOf<String>()
 
     private var posisiGelembungX = 0
     private var posisiGelembungY = 300
@@ -401,30 +408,71 @@ object JendelaGelembungMelayang {
             setPadding(p, p, p, p)
         }
 
-        // [FITUR: Pegangan Geser ke Atas (Drag Handle)]
+        // [FITUR: Pegangan Geser / Garis Persegi Panjang Kecil Interaktif] - Menarik ke atas untuk mode scroll horizontal, ke bawah untuk mode scroll vertikal
         val peganganGeser = LinearLayout(konteks).apply {
             gravity = Gravity.CENTER
             val pBawah = dpKePx(6)
             setPadding(0, 0, 0, pBawah)
         }
         val barGrip = View(konteks).apply {
-            layoutParams = LinearLayout.LayoutParams(dpKePx(48), dpKePx(4))
+            layoutParams = LinearLayout.LayoutParams(dpKePx(56), dpKePx(5))
             val latarGrip = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                cornerRadius = dpKePx(2).toFloat()
+                cornerRadius = dpKePx(3).toFloat()
                 setColor(Color.parseColor("#9CA3AF"))
             }
             background = latarGrip
         }
         peganganGeser.addView(barGrip)
 
-        // Sentuh pegangan untuk toggle perbesar / perkecil laci
-        peganganGeser.setOnClickListener {
-            bukaLaciAntrean(konteks, perbesarPenuh = !laciModePenuh)
-        }
+        // Interaksi gesture garis penarik (Tarik ke atas = scroll horizontal, tarik ke bawah = scroll vertikal)
+        peganganGeser.setOnTouchListener(object : View.OnTouchListener {
+            private var awalY = 0f
+            private var sudahGanti = false
+
+            override fun onTouch(v: View, event: MotionEvent): Boolean {
+                aturUlangTimerInaktivitas()
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        awalY = event.rawY
+                        sudahGanti = false
+                        return true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val deltaY = event.rawY - awalY
+                        if (!sudahGanti) {
+                            if (deltaY < -dpKePx(16)) {
+                                // Menarik ke atas -> Scroll secara horizontal
+                                sudahGanti = true
+                                if (laciModePenuh) {
+                                    bukaLaciAntrean(konteks, perbesarPenuh = false)
+                                    Toast.makeText(konteks, "Mode Scroll Horizontal Aktif", Toast.LENGTH_SHORT).show()
+                                }
+                                return true
+                            } else if (deltaY > dpKePx(16)) {
+                                // Menarik ke bawah -> Scroll secara vertikal
+                                sudahGanti = true
+                                if (!laciModePenuh) {
+                                    bukaLaciAntrean(konteks, perbesarPenuh = true)
+                                    Toast.makeText(konteks, "Mode Scroll Vertikal Aktif", Toast.LENGTH_SHORT).show()
+                                }
+                                return true
+                            }
+                        }
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        if (!sudahGanti) {
+                            bukaLaciAntrean(konteks, perbesarPenuh = !laciModePenuh)
+                        }
+                        return true
+                    }
+                }
+                return false
+            }
+        })
         tataLetakLaci.addView(peganganGeser)
 
-        // Header Laci (Judul, Tombol Mode Ukuran, Tombol Kirim Semua, Tombol Tutup)
+        // Header Laci (Judul, Mode, Pilih Beberapa / Batal Pilih, Salin Terpilih, Kirim Semua, Tutup)
         val tataLetakHeader = LinearLayout(konteks).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -435,33 +483,77 @@ object JendelaGelembungMelayang {
         val teksJudul = TextView(konteks).apply {
             text = "Brankas (${antrean.size} Foto)"
             setTextColor(Color.WHITE)
-            textSize = 14f
+            textSize = 13f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         tataLetakHeader.addView(teksJudul)
 
-        // Tombol Tarik ke Atas / Perkecil
-        val tombolTarikAtas = TextView(konteks).apply {
-            text = if (laciModePenuh) "Perkecil ▼" else "Tarik Penuh ▲"
-            setTextColor(Color.parseColor("#38BDF8"))
-            textSize = 12f
-            val pX = dpKePx(8)
+        // Tombol Pilih Beberapa / Batal Pilih
+        val tombolPilihBeberapa = TextView(konteks).apply {
+            text = if (modePilihBeberapa) "Batal Pilih" else "Pilih Beberapa"
+            setTextColor(if (modePilihBeberapa) Color.parseColor("#FCA5A5") else Color.parseColor("#93C5FD"))
+            textSize = 11f
+            val pX = dpKePx(7)
             val pY = dpKePx(4)
             setPadding(pX, pY, pX, pY)
+            val latar = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpKePx(6).toFloat()
+                setColor(if (modePilihBeberapa) Color.parseColor("#7F1D1D") else Color.parseColor("#1E3A8A"))
+            }
+            background = latar
             setOnClickListener {
-                bukaLaciAntrean(konteks, perbesarPenuh = !laciModePenuh)
+                aturUlangTimerInaktivitas()
+                modePilihBeberapa = !modePilihBeberapa
+                kumpulanJalurTerpilih.clear()
+                bukaLaciAntrean(konteks, perbesarPenuh = laciModePenuh)
             }
         }
-        tataLetakHeader.addView(tombolTarikAtas)
+        tataLetakHeader.addView(tombolPilihBeberapa)
 
-        val pemisah1 = View(konteks).apply { layoutParams = LinearLayout.LayoutParams(dpKePx(6), 1) }
-        tataLetakHeader.addView(pemisah1)
+        val pemisahPilih = View(konteks).apply { layoutParams = LinearLayout.LayoutParams(dpKePx(5), 1) }
+        tataLetakHeader.addView(pemisahPilih)
 
+        // Tombol Salin Terpilih (jika modePilihBeberapa aktif)
+        if (modePilihBeberapa) {
+            val tombolSalinTerpilih = TextView(konteks).apply {
+                val jumlah = kumpulanJalurTerpilih.size
+                text = if (jumlah > 0) "Salin ($jumlah)" else "Salin"
+                setTextColor(Color.WHITE)
+                textSize = 11f
+                val pX = dpKePx(7)
+                val pY = dpKePx(4)
+                setPadding(pX, pY, pX, pY)
+                val latar = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpKePx(6).toFloat()
+                    setColor(if (jumlah > 0) Color.parseColor("#2563EB") else Color.parseColor("#4B5563"))
+                }
+                background = latar
+                setOnClickListener {
+                    aturUlangTimerInaktivitas()
+                    if (kumpulanJalurTerpilih.isEmpty()) {
+                        Toast.makeText(konteks, "Pilih minimal 1 gambar terlebih dahulu", Toast.LENGTH_SHORT).show()
+                    } else {
+                        PengelolaBrankas.salinBanyakGambarKePapanKlip(konteks, kumpulanJalurTerpilih.toList(), tampilkanNotifikasi = true)
+                        modePilihBeberapa = false
+                        kumpulanJalurTerpilih.clear()
+                        bukaLaciAntrean(konteks, perbesarPenuh = laciModePenuh)
+                    }
+                }
+            }
+            tataLetakHeader.addView(tombolSalinTerpilih)
+
+            val pemisahSalin = View(konteks).apply { layoutParams = LinearLayout.LayoutParams(dpKePx(5), 1) }
+            tataLetakHeader.addView(pemisahSalin)
+        }
+
+        // Tombol Kirim Semua
         val tombolKirimSemua = TextView(konteks).apply {
             text = "Kirim Semua"
             setTextColor(Color.parseColor("#4ADE80"))
-            textSize = 12f
-            val pX = dpKePx(8)
+            textSize = 11f
+            val pX = dpKePx(7)
             val pY = dpKePx(4)
             setPadding(pX, pY, pX, pY)
             val latar = GradientDrawable().apply {
@@ -476,14 +568,14 @@ object JendelaGelembungMelayang {
         }
         tataLetakHeader.addView(tombolKirimSemua)
 
-        val pemisah2 = View(konteks).apply { layoutParams = LinearLayout.LayoutParams(dpKePx(6), 1) }
+        val pemisah2 = View(konteks).apply { layoutParams = LinearLayout.LayoutParams(dpKePx(5), 1) }
         tataLetakHeader.addView(pemisah2)
 
         val tombolTutup = TextView(konteks).apply {
             text = "✕"
             setTextColor(Color.GRAY)
             textSize = 16f
-            val p = dpKePx(6)
+            val p = dpKePx(4)
             setPadding(p, p, p, p)
             setOnClickListener { tutupLaciAntrean() }
         }
@@ -575,7 +667,7 @@ object JendelaGelembungMelayang {
         }
     }
 
-    // [FITUR: Pembuat Kartu Thumbnail] - Komponen item gambar interaktif
+    // [FITUR: Pembuat Kartu Thumbnail Interaktif] - Checkbox pojok kiri atas (mode pilih), klik 2 kali salin, tekan lama menu pop up simpan & edit
     private fun buatKartuThumbnail(
         konteks: Context,
         butir: ButirScreenshot,
@@ -586,7 +678,7 @@ object JendelaGelembungMelayang {
             TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), konteks.resources.displayMetrics).toInt()
         }
 
-        val wadah = LinearLayout(konteks).apply {
+        val wadahUtama = LinearLayout(konteks).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             val m = dpKePx(4)
@@ -594,11 +686,21 @@ object JendelaGelembungMelayang {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
-        val gambar = ImageView(konteks).apply {
+        // Wadah Gambar + Checkbox Bertumpuk (FrameLayout)
+        val wadahGambarRelatif = FrameLayout(konteks).apply {
             layoutParams = LinearLayout.LayoutParams(lebarPx, tinggiPx)
+        }
+
+        val terpilihSaatIni = kumpulanJalurTerpilih.contains(butir.jalurBerkas)
+
+        val gambar = ImageView(konteks).apply {
+            layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
             scaleType = ImageView.ScaleType.CENTER_CROP
             val sudut = GradientDrawable().apply {
                 cornerRadius = dpKePx(8).toFloat()
+                if (terpilihSaatIni) {
+                    setStroke(dpKePx(2), Color.parseColor("#38BDF8"))
+                }
             }
             clipToOutline = true
             background = sudut
@@ -610,27 +712,153 @@ object JendelaGelembungMelayang {
             } catch (_: Exception) {
                 setImageResource(android.R.drawable.ic_menu_gallery)
             }
-
-            setOnClickListener {
-                PengelolaBrankas.salinGambarKePapanKlip(konteks, butir.jalurBerkas, tampilkanNotifikasi = true)
-                aturUlangTimerInaktivitas()
-            }
         }
-        wadah.addView(gambar)
+        wadahGambarRelatif.addView(gambar)
 
+        // [FITUR: Checkbox di Pojok Kiri Atas Gambar] - Hanya tampil saat modePilihBeberapa aktif, default non-aktif
+        if (modePilihBeberapa) {
+            val tampilanCheckbox = TextView(konteks).apply {
+                val ukuran = dpKePx(22)
+                layoutParams = FrameLayout.LayoutParams(ukuran, ukuran).apply {
+                    gravity = Gravity.TOP or Gravity.START
+                    val margin = dpKePx(4)
+                    setMargins(margin, margin, 0, 0)
+                }
+                gravity = Gravity.CENTER
+                textSize = 12f
+                val latarCentang = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    if (terpilihSaatIni) {
+                        setColor(Color.parseColor("#10B981"))
+                        setStroke(dpKePx(1), Color.WHITE)
+                    } else {
+                        setColor(Color.parseColor("#80000000"))
+                        setStroke(dpKePx(2), Color.WHITE)
+                    }
+                }
+                background = latarCentang
+                text = if (terpilihSaatIni) "✓" else ""
+                setTextColor(Color.WHITE)
+            }
+            wadahGambarRelatif.addView(tampilanCheckbox)
+        }
+
+        // [FITUR: Deteksi Double Tap (Salin 1 Foto) & Long Press (Pop Up Simpan/Edit)]
+        val detektorSentuh = GestureDetector(konteks, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean = true
+
+            // [FITUR: Klik 2 Kali (Double Tap) -> Salin 1 Image + Notif]
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                aturUlangTimerInaktivitas()
+                PengelolaBrankas.salinGambarKePapanKlip(konteks, butir.jalurBerkas, tampilkanNotifikasi = false)
+                Toast.makeText(konteks, "Foto berhasil disalin ke papan klip!", Toast.LENGTH_SHORT).show()
+                return true
+            }
+
+            // [FITUR: Tekan Lama (Long Press) -> Pop Up Simpan ke Galeri & Edit]
+            override fun onLongPress(e: MotionEvent) {
+                aturUlangTimerInaktivitas()
+                tampilkanDialogOpsiFoto(konteks, butir.jalurBerkas)
+            }
+
+            // [FITUR: Klik 1 Kali]
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                aturUlangTimerInaktivitas()
+                if (modePilihBeberapa) {
+                    if (kumpulanJalurTerpilih.contains(butir.jalurBerkas)) {
+                        kumpulanJalurTerpilih.remove(butir.jalurBerkas)
+                    } else {
+                        kumpulanJalurTerpilih.add(butir.jalurBerkas)
+                    }
+                    bukaLaciAntrean(konteks, perbesarPenuh = laciModePenuh)
+                }
+                return true
+            }
+        })
+
+        wadahGambarRelatif.setOnTouchListener { _, event ->
+            detektorSentuh.onTouchEvent(event)
+        }
+
+        wadahUtama.addView(wadahGambarRelatif)
+
+        // Label teks "Salin" di bawah gambar
         val teksSalin = TextView(konteks).apply {
-            text = "Salin"
-            setTextColor(Color.parseColor("#93C5FD"))
+            text = if (modePilihBeberapa) {
+                if (terpilihSaatIni) "Terpilih ✓" else "Pilih"
+            } else {
+                "Salin"
+            }
+            setTextColor(if (terpilihSaatIni) Color.parseColor("#34D399") else Color.parseColor("#93C5FD"))
             textSize = 10f
             val topM = dpKePx(2)
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { topMargin = topM }
+            setOnClickListener {
+                aturUlangTimerInaktivitas()
+                if (modePilihBeberapa) {
+                    if (kumpulanJalurTerpilih.contains(butir.jalurBerkas)) {
+                        kumpulanJalurTerpilih.remove(butir.jalurBerkas)
+                    } else {
+                        kumpulanJalurTerpilih.add(butir.jalurBerkas)
+                    }
+                    bukaLaciAntrean(konteks, perbesarPenuh = laciModePenuh)
+                } else {
+                    PengelolaBrankas.salinGambarKePapanKlip(konteks, butir.jalurBerkas, tampilkanNotifikasi = false)
+                    Toast.makeText(konteks, "Foto berhasil disalin ke papan klip!", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
-        wadah.addView(teksSalin)
+        wadahUtama.addView(teksSalin)
 
-        return wadah
+        return wadahUtama
+    }
+
+    // [FITUR: Dialog Opsi Foto saat Tekan Lama] - Menampilkan dialog Simpan ke Galeri dan Edit Gambar
+    fun tampilkanDialogOpsiFoto(konteks: Context, jalurBerkas: String) {
+        penanganUtama.post {
+            val builder = android.app.AlertDialog.Builder(konteks, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            builder.setTitle("Opsi Foto")
+            builder.setItems(arrayOf("Simpan ke Galeri", "Edit (Crop, Coret, Mirror & Putar)")) { dialog, which ->
+                dialog.dismiss()
+                when (which) {
+                    0 -> {
+                        PengelolaBrankas.simpanGambarKeGaleriPublik(konteks, jalurBerkas)
+                    }
+                    1 -> {
+                        bukaLayarEditorDariOverlay(konteks, jalurBerkas)
+                    }
+                }
+            }
+            val dialog = builder.create()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                dialog.window?.setType(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY)
+            } else {
+                @Suppress("DEPRECATION")
+                dialog.window?.setType(WindowManager.LayoutParams.TYPE_PHONE)
+            }
+            try {
+                dialog.show()
+            } catch (e: Exception) {
+                Log.e(TAG, "Gagal memunculkan dialog opsi: ${e.message}")
+            }
+        }
+    }
+
+    // [FITUR: Buka Layar Editor dari Overlay] - Meluncurkan MainActivity dengan rute pengeditan gambar
+    fun bukaLayarEditorDariOverlay(konteks: Context, jalurBerkas: String) {
+        try {
+            val niat = Intent(konteks, MainActivity::class.java).apply {
+                putExtra("jalur_berkas_edit", jalurBerkas)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            konteks.startActivity(niat)
+            tutupLaciAntrean()
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal membuka editor dari overlay: ${e.message}")
+        }
     }
 
     // [FITUR: Tutup Laci Antrean] - Menutup panel bottom drawer

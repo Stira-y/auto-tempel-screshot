@@ -94,6 +94,32 @@ class SaluranPenghubungNative {
     }
   }
 
+  // [FITUR: Salin Banyak Gambar Sekaligus ke Papan Klip] - Menyalin beberapa gambar yang dipilih ke clipboard
+  static Future<bool> salinBanyakGambarKePapanKlip(List<String> daftarJalur) async {
+    try {
+      final sukses = await _saluranMetode.invokeMethod<bool>(
+        'salinBanyakGambarKePapanKlip',
+        {'daftarJalur': daftarJalur},
+      );
+      return sukses ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // [FITUR: Simpan Satu Gambar Langsung ke Galeri Publik] - Menyimpan berkas dari brankas ke Galeri (Pictures/AutoTempelEdit)
+  static Future<bool> simpanGambarKeGaleriPublik(String jalurBerkas) async {
+    try {
+      final sukses = await _saluranMetode.invokeMethod<bool>(
+        'simpanGambarKeGaleriPublik',
+        {'jalurBerkas': jalurBerkas},
+      );
+      return sukses ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // [FITUR: Bagikan Seluruh Antrean Sekaligus] - Mengirim seluruh gambar antrean ke WhatsApp
   static Future<bool> bagikanSemuaAntrean() async {
     try {

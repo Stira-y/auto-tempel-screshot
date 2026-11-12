@@ -51,6 +51,34 @@ class MainActivity : FlutterActivity() {
                 )
             }
         }
+
+        fun kirimPeristiwaBukaEditor(jalurBerkas: String) {
+            penanganUtama.postDelayed({
+                pemancarPeristiwa?.success(
+                    mapOf(
+                        "jenis" to "buka_editor",
+                        "jalurBerkas" to jalurBerkas
+                    )
+                )
+            }, 300)
+        }
+    }
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        tanganiNiatEdit(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        tanganiNiatEdit(intent)
+    }
+
+    private fun tanganiNiatEdit(niat: Intent?) {
+        val jalurBerkas = niat?.getStringExtra("jalur_berkas_edit")
+        if (!jalurBerkas.isNullOrEmpty()) {
+            kirimPeristiwaBukaEditor(jalurBerkas)
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -97,6 +125,16 @@ class MainActivity : FlutterActivity() {
                     "salinGambarKePapanKlip" -> {
                         val jalurBerkas = panggilan.argument<String>("jalurBerkas") ?: ""
                         val sukses = PengelolaBrankas.salinGambarKePapanKlip(this, jalurBerkas)
+                        hasil.success(sukses)
+                    }
+                    "salinBanyakGambarKePapanKlip" -> {
+                        val daftarJalur = panggilan.argument<List<String>>("daftarJalur") ?: emptyList()
+                        val sukses = PengelolaBrankas.salinBanyakGambarKePapanKlip(this, daftarJalur)
+                        hasil.success(sukses)
+                    }
+                    "simpanGambarKeGaleriPublik" -> {
+                        val jalurBerkas = panggilan.argument<String>("jalurBerkas") ?: ""
+                        val sukses = PengelolaBrankas.simpanGambarKeGaleriPublik(this, jalurBerkas)
                         hasil.success(sukses)
                     }
                     "bagikanSemuaAntrean" -> {

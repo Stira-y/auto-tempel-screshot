@@ -297,7 +297,7 @@ object PengelolaBrankas {
 
                     if (tampilkanNotifikasi) {
                         penanganUtama.post {
-                            Toast.makeText(konteks, "Screenshot disalin ke papan klip!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(konteks, "Foto berhasil disalin ke papan klip!", Toast.LENGTH_SHORT).show()
                         }
                     }
                 } catch (e: Exception) {
@@ -307,6 +307,81 @@ object PengelolaBrankas {
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Terjadi kesalahan saat memicu salin clipboard: ${e.message}")
+            return false
+        }
+    }
+
+    // [FITUR: Salin Banyak Gambar Sekaligus ke Papan Klip] - Menyalin beberapa gambar yang dipilih ke clipboard
+    fun salinBanyakGambarKePapanKlip(
+        konteks: Context,
+        daftarJalur: List<String>,
+        tampilkanNotifikasi: Boolean = true
+    ): Boolean {
+        if (daftarJalur.isEmpty()) return false
+        val otoritas = "${konteks.packageName}.penyedia_berkas"
+        val daftarUri = ArrayList<Uri>()
+
+        for (jalur in daftarJalur) {
+            val berkas = File(jalur)
+            if (berkas.exists()) {
+                val uriKonten = FileProvider.getUriForFile(konteks, otoritas, berkas)
+                daftarUri.add(uriKonten)
+            }
+        }
+
+        if (daftarUri.isEmpty()) return false
+
+        try {
+            JendelaGelembungMelayang.tampilkanOverlayFokusSesaat(konteks) {
+                try {
+                    val manajerPapanKlip = konteks.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val klip = ClipData.newUri(konteks.contentResolver, "Screenshot Terpilih", daftarUri.first())
+                    for (i in 1 until daftarUri.size) {
+                        klip.addItem(ClipData.Item(daftarUri[i]))
+                    }
+                    manajerPapanKlip.setPrimaryClip(klip)
+
+                    if (tampilkanNotifikasi) {
+                        penanganUtama.post {
+                            Toast.makeText(konteks, "${daftarUri.size} foto berhasil disalin ke papan klip!", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Gagal menyalin banyak gambar ke clipboard: ${e.message}")
+                }
+            }
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "Terjadi kesalahan saat salin banyak: ${e.message}")
+            return false
+        }
+    }
+
+    // [FITUR: Simpan Satu Gambar dari Brankas Langsung ke Galeri Publik] - Opsi tekan lama: simpan ke galeri tanpa edit
+    fun simpanGambarKeGaleriPublik(konteks: Context, jalurBerkas: String): Boolean {
+        val berkas = File(jalurBerkas)
+        if (!berkas.exists()) {
+            penanganUtama.post {
+                Toast.makeText(konteks, "Berkas gambar tidak ditemukan!", Toast.LENGTH_SHORT).show()
+            }
+            return false
+        }
+
+        try {
+            val dataByte = berkas.readBytes()
+            val stempelWaktu = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val namaBerkasSimpan = "AutoTempel_${stempelWaktu}_${berkas.name}"
+            val uriHasil = simpanHasilEditKeGaleri(konteks, dataByte, namaBerkasSimpan)
+            val sukses = uriHasil != null
+
+            if (sukses) {
+                penanganUtama.post {
+                    Toast.makeText(konteks, "Foto berhasil disimpan ke galeri!", Toast.LENGTH_SHORT).show()
+                }
+            }
+            return sukses
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal menyimpan gambar langsung ke galeri: ${e.message}")
             return false
         }
     }

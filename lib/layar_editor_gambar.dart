@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'komponen_kanvas_coret.dart';
@@ -6,7 +7,7 @@ import 'komponen_pemotong_gambar.dart';
 import 'model_berkas_gambar.dart';
 import 'saluran_metode.dart';
 
-// [FITUR: Layar Editor Gambar] - Halaman pengeditan tangkapan layar 100% offline dengan alat crop rasio, coret/anotasi bebas, undo, dan simpan permanen ke galeri
+// [FITUR: Layar Editor Gambar] - Halaman pengeditan tangkapan layar 100% offline dengan alat crop rasio, coret/anotasi bebas, rotasi derajat, cermin/mirror, dan simpan permanen ke galeri
 class LayarEditorGambar extends StatefulWidget {
   final ModelBerkasGambar berkasGambar;
 
@@ -22,6 +23,7 @@ class LayarEditorGambar extends StatefulWidget {
 enum _ModeAlatEditor {
   coret,
   potong,
+  transformasi,
 }
 
 class _LayarEditorGambarState extends State<LayarEditorGambar> {
@@ -46,6 +48,15 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
   RasioPotong _rasioPotongDipilih = RasioPotong.bebas;
   Rect _areaPotongAktif = Rect.zero;
   Rect _batasGambarPadaLayar = Rect.zero;
+
+  // [FITUR: State Transformasi Mirror & Rotasi Derajat]
+  bool _cerminHorizontal = false;
+  bool _cerminVertikal = false;
+  int _rotasiKelipatan90 = 0; // 0, 1, 2, 3 (0°, 90°, 180°, 270°)
+  double _sudutRotasiDerajat = 0.0; // Slider derajat halus (-45° s/d +45°)
+
+  double get _totalRotasiRadian =>
+      (_rotasiKelipatan90 * 90 + _sudutRotasiDerajat) * (pi / 180.0);
 
   // Metadata Gambar Asli
   ui.Image? _gambarAsli;
@@ -139,53 +150,63 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              // Gambar Screenshot Dasar
-                              Image.file(
-                                File(widget.berkasGambar.jalurBerkas),
-                                fit: BoxFit.contain,
-                              ),
-
-                              // Lapisan Coret-coret Anotasi Bebas
-                              if (_modeAktif == _ModeAlatEditor.coret)
-                                GestureDetector(
-                                  onPanStart: (rincian) {
-                                    setState(() {
-                                      _coretanSedangDitarik = GarisCoretan(
-                                        titikKoordinat: [rincian.localPosition],
-                                        warna: _warnaKuasDipilih,
-                                        ketebalan: _ketebalanKuas,
-                                      );
-                                    });
-                                  },
-                                  onPanUpdate: (rincian) {
-                                    setState(() {
-                                      _coretanSedangDitarik?.titikKoordinat.add(rincian.localPosition);
-                                    });
-                                  },
-                                  onPanEnd: (_) {
-                                    if (_coretanSedangDitarik != null) {
-                                      setState(() {
-                                        _daftarCoretan.add(_coretanSedangDitarik!);
-                                        _coretanSedangDitarik = null;
-                                      });
-                                    }
-                                  },
-                                  child: CustomPaint(
-                                    size: Size(_batasGambarPadaLayar.width, _batasGambarPadaLayar.height),
-                                    painter: PelukisCoretan(
-                                      daftarCoretan: _daftarCoretan,
-                                      coretanAktif: _coretanSedangDitarik,
+                              // Wadah Gambar Dasar + Lapisan Coretan yang terhubung dengan Transformasi Mirror & Putar
+                              Transform(
+                                alignment: Alignment.center,
+                                transform: Matrix4.identity()
+                                  ..scale(_cerminHorizontal ? -1.0 : 1.0, _cerminVertikal ? -1.0 : 1.0)
+                                  ..rotateZ(_totalRotasiRadian),
+                                child: Stack(
+                                  fit: StackFit.expand,
+                                  children: [
+                                    Image.file(
+                                      File(widget.berkasGambar.jalurBerkas),
+                                      fit: BoxFit.contain,
                                     ),
-                                  ),
-                                )
-                              else
-                                // Mode non-aktif hanya menampilkan coretan sebelumnya
-                                CustomPaint(
-                                  size: Size(_batasGambarPadaLayar.width, _batasGambarPadaLayar.height),
-                                  painter: PelukisCoretan(
-                                    daftarCoretan: _daftarCoretan,
-                                  ),
+
+                                    // Lapisan Coret-coret Anotasi Bebas
+                                    if (_modeAktif == _ModeAlatEditor.coret)
+                                      GestureDetector(
+                                        onPanStart: (rincian) {
+                                          setState(() {
+                                            _coretanSedangDitarik = GarisCoretan(
+                                              titikKoordinat: [rincian.localPosition],
+                                              warna: _warnaKuasDipilih,
+                                              ketebalan: _ketebalanKuas,
+                                            );
+                                          });
+                                        },
+                                        onPanUpdate: (rincian) {
+                                          setState(() {
+                                            _coretanSedangDitarik?.titikKoordinat.add(rincian.localPosition);
+                                          });
+                                        },
+                                        onPanEnd: (_) {
+                                          if (_coretanSedangDitarik != null) {
+                                            setState(() {
+                                              _daftarCoretan.add(_coretanSedangDitarik!);
+                                              _coretanSedangDitarik = null;
+                                            });
+                                          }
+                                        },
+                                        child: CustomPaint(
+                                          size: Size(_batasGambarPadaLayar.width, _batasGambarPadaLayar.height),
+                                          painter: PelukisCoretan(
+                                            daftarCoretan: _daftarCoretan,
+                                            coretanAktif: _coretanSedangDitarik,
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      CustomPaint(
+                                        size: Size(_batasGambarPadaLayar.width, _batasGambarPadaLayar.height),
+                                        painter: PelukisCoretan(
+                                          daftarCoretan: _daftarCoretan,
+                                        ),
+                                      ),
+                                  ],
                                 ),
+                              ),
 
                               // Lapisan Kotak Potong Interaktif
                               if (_modeAktif == _ModeAlatEditor.potong)
@@ -245,7 +266,7 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
     }
   }
 
-  // [FITUR: Panel Navigasi dan Kontrol Alat Bawah] - Memilih antara mode Coret dan mode Potong beserta sub-opsinya
+  // [FITUR: Panel Navigasi dan Kontrol Alat Bawah] - Memilih antara mode Coret, Potong, dan Transformasi Putar/Cermin
   Widget _bangunPanelAlatBawah() {
     return Container(
       color: const Color(0xFF1F2937),
@@ -256,7 +277,12 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
           mainAxisSize: MainAxisSize.min,
           children: [
             // Kontrol Spesifik Sesuai Mode Aktif
-            if (_modeAktif == _ModeAlatEditor.coret) _bangunKontrolCoretan() else _bangunKontrolPotong(),
+            if (_modeAktif == _ModeAlatEditor.coret)
+              _bangunKontrolCoretan()
+            else if (_modeAktif == _ModeAlatEditor.potong)
+              _bangunKontrolPotong()
+            else
+              _bangunKontrolTransformasi(),
 
             const SizedBox(height: 12),
             const Divider(color: Color(0xFF374151), height: 1),
@@ -268,21 +294,119 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
               children: [
                 _bangunTombolMode(
                   ikon: Icons.brush,
-                  label: 'Coret & Anotasi',
+                  label: 'Coret',
                   terpilih: _modeAktif == _ModeAlatEditor.coret,
                   padaKetuk: () => setState(() => _modeAktif = _ModeAlatEditor.coret),
                 ),
                 _bangunTombolMode(
                   ikon: Icons.crop,
-                  label: 'Potong (Crop)',
+                  label: 'Potong',
                   terpilih: _modeAktif == _ModeAlatEditor.potong,
                   padaKetuk: () => setState(() => _modeAktif = _ModeAlatEditor.potong),
+                ),
+                _bangunTombolMode(
+                  ikon: Icons.rotate_right,
+                  label: 'Putar & Mirror',
+                  terpilih: _modeAktif == _ModeAlatEditor.transformasi,
+                  padaKetuk: () => setState(() => _modeAktif = _ModeAlatEditor.transformasi),
                 ),
               ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  // [FITUR: Kontrol Transformasi Mirror & Rotasi Derajat] - Rotasi 90 derajat, slider putar derajat halus, dan cermin horizontal/vertikal
+  Widget _bangunKontrolTransformasi() {
+    return Column(
+      children: [
+        // Baris Tombol Aksi Cepat
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            // Tombol Putar 90 Derajat
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _rotasiKelipatan90 = (_rotasiKelipatan90 + 1) % 4;
+                });
+              },
+              icon: const Icon(Icons.rotate_90_degrees_cw, size: 16),
+              label: Text('+90° (${_rotasiKelipatan90 * 90}°)'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF374151),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+            ),
+
+            // Tombol Mirror Horizontal
+            FilterChip(
+              label: const Text('Cermin H'),
+              selected: _cerminHorizontal,
+              avatar: const Icon(Icons.flip, size: 16, color: Colors.white),
+              selectedColor: const Color(0xFF3B82F6),
+              backgroundColor: const Color(0xFF374151),
+              labelStyle: const TextStyle(color: Colors.white, fontSize: 11),
+              onSelected: (val) => setState(() => _cerminHorizontal = val),
+            ),
+
+            // Tombol Mirror Vertikal
+            FilterChip(
+              label: const Text('Cermin V'),
+              selected: _cerminVertikal,
+              avatar: const Icon(Icons.swap_vert, size: 16, color: Colors.white),
+              selectedColor: const Color(0xFF3B82F6),
+              backgroundColor: const Color(0xFF374151),
+              labelStyle: const TextStyle(color: Colors.white, fontSize: 11),
+              onSelected: (val) => setState(() => _cerminVertikal = val),
+            ),
+
+            // Tombol Reset Transformasi
+            IconButton(
+              icon: const Icon(Icons.restart_alt, color: Colors.amberAccent),
+              tooltip: 'Reset Putar & Cermin',
+              onPressed: () {
+                setState(() {
+                  _rotasiKelipatan90 = 0;
+                  _sudutRotasiDerajat = 0.0;
+                  _cerminHorizontal = false;
+                  _cerminVertikal = false;
+                });
+              },
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 8),
+
+        // Slider Rotasi Derajat Bebas (-45° s/d +45°)
+        Row(
+          children: [
+            const Icon(Icons.screen_rotation_outlined, color: Colors.grey, size: 20),
+            Expanded(
+              child: Slider(
+                value: _sudutRotasiDerajat,
+                min: -45.0,
+                max: 45.0,
+                divisions: 90,
+                activeColor: const Color(0xFF38BDF8),
+                inactiveColor: Colors.grey.shade700,
+                onChanged: (val) => setState(() => _sudutRotasiDerajat = val),
+              ),
+            ),
+            SizedBox(
+              width: 50,
+              child: Text(
+                '${_sudutRotasiDerajat.toStringAsFixed(1)}°',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -448,48 +572,42 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
     );
   }
 
-  // [FITUR: Simpan Hasil Edit ke Galeri] - Mengekspor gambar yang sudah di-crop atau dicoret dari brankas privat ke galeri publik HP via MediaStore
+  // [FITUR: Simpan Hasil Edit ke Galeri] - Mengekspor gambar yang sudah di-crop, dicoret, di-mirror, dan diputar dari brankas privat ke galeri publik HP via MediaStore
   Future<void> _simpanHasilEditKeGaleri() async {
     if (_gambarAsli == null) return;
 
     setState(() => _sedangMenyimpan = true);
 
     try {
-      // 1. Hitung faktor skala antara gambar asli dan tampilan layar
-      final skalaX = _gambarAsli!.width / _batasGambarPadaLayar.width;
-      final skalaY = _gambarAsli!.height / _batasGambarPadaLayar.height;
+      final lebarAsli = _gambarAsli!.width.toDouble();
+      final tinggiAsli = _gambarAsli!.height.toDouble();
 
-      // 2. Tentukan area crop pada resolusi gambar asli
-      final areaCropLayar = (_modeAktif == _ModeAlatEditor.potong && _areaPotongAktif.width > 0)
-          ? _areaPotongAktif
-          : Rect.fromLTWH(0, 0, _batasGambarPadaLayar.width, _batasGambarPadaLayar.height);
+      // 1. Hitung dimensi kanvas setelah rotasi derajat & cermin
+      final totalRadian = _totalRotasiRadian;
+      final cosSudut = cos(totalRadian).abs();
+      final sinSudut = sin(totalRadian).abs();
 
-      final rectAsli = Rect.fromLTRB(
-        (areaCropLayar.left * skalaX).clamp(0.0, _gambarAsli!.width.toDouble()),
-        (areaCropLayar.top * skalaY).clamp(0.0, _gambarAsli!.height.toDouble()),
-        (areaCropLayar.right * skalaX).clamp(0.0, _gambarAsli!.width.toDouble()),
-        (areaCropLayar.bottom * skalaY).clamp(0.0, _gambarAsli!.height.toDouble()),
-      );
+      final lebarRotasi = (lebarAsli * cosSudut + tinggiAsli * sinSudut).round().clamp(1, 100000);
+      final tinggiRotasi = (lebarAsli * sinSudut + tinggiAsli * cosSudut).round().clamp(1, 100000);
 
-      final lebarHasil = rectAsli.width.toInt();
-      final tinggiHasil = rectAsli.height.toInt();
+      // 2. Render foto asli + seluruh coretan dengan transformasi penuh (Rotasi + Cermin)
+      final perekamTrans = ui.PictureRecorder();
+      final kanvasTrans = Canvas(perekamTrans);
 
-      if (lebarHasil <= 0 || tinggiHasil <= 0) {
-        throw Exception('Dimensi hasil crop tidak valid');
-      }
+      kanvasTrans.save();
+      kanvasTrans.translate(lebarRotasi / 2.0, tinggiRotasi / 2.0);
+      kanvasTrans.rotate(totalRadian);
+      kanvasTrans.scale(_cerminHorizontal ? -1.0 : 1.0, _cerminVertikal ? -1.0 : 1.0);
+      kanvasTrans.translate(-lebarAsli / 2.0, -tinggiAsli / 2.0);
 
-      // 3. Render gambar komposit (Crop + Coretan) menggunakan PictureRecorder
-      final perekam = ui.PictureRecorder();
-      final kanvasRender = Canvas(perekam);
+      // Gambar foto asli
+      kanvasTrans.drawImage(_gambarAsli!, Offset.zero, Paint());
 
-      // Gambar potongan foto asli
-      final rectTujuan = Rect.fromLTWH(0, 0, lebarHasil.toDouble(), tinggiHasil.toDouble());
-      kanvasRender.drawImageRect(_gambarAsli!, rectAsli, rectTujuan, Paint());
-
-      // Gambar goresan coretan di atas foto dengan penyesuaian offset dan skala crop
-      kanvasRender.save();
-      kanvasRender.translate(-areaCropLayar.left * skalaX, -areaCropLayar.top * skalaY);
-      kanvasRender.scale(skalaX, skalaY);
+      // Gambar goresan coretan di atas foto
+      final skalaCoretX = lebarAsli / _batasGambarPadaLayar.width;
+      final skalaCoretY = tinggiAsli / _batasGambarPadaLayar.height;
+      kanvasTrans.save();
+      kanvasTrans.scale(skalaCoretX, skalaCoretY);
 
       for (final garis in _daftarCoretan) {
         if (garis.titikKoordinat.isEmpty) continue;
@@ -502,23 +620,56 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
           ..isAntiAlias = true;
 
         if (garis.titikKoordinat.length == 1) {
-          kanvasRender.drawCircle(garis.titikKoordinat.first, garis.ketebalan / 2, kuas..style = PaintingStyle.fill);
+          kanvasTrans.drawCircle(garis.titikKoordinat.first, garis.ketebalan / 2, kuas..style = PaintingStyle.fill);
         } else {
           final jalur = Path();
           jalur.moveTo(garis.titikKoordinat.first.dx, garis.titikKoordinat.first.dy);
           for (int i = 1; i < garis.titikKoordinat.length; i++) {
             jalur.lineTo(garis.titikKoordinat[i].dx, garis.titikKoordinat[i].dy);
           }
-          kanvasRender.drawPath(jalur, kuas);
+          kanvasTrans.drawPath(jalur, kuas);
         }
       }
-      kanvasRender.restore();
+      kanvasTrans.restore();
+      kanvasTrans.restore();
 
-      final gambarKomposit = await perekam.endRecording().toImage(lebarHasil, tinggiHasil);
-      final byteData = await gambarKomposit.toByteData(format: ui.ImageByteFormat.png);
+      final gambarTransformed = await perekamTrans.endRecording().toImage(lebarRotasi, tinggiRotasi);
+
+      // 3. Jika pengguna menerapkan pemotongan (Crop), potong hasil transformasi tersebut
+      ui.Image gambarAkhir = gambarTransformed;
+      if (_modeAktif == _ModeAlatEditor.potong &&
+          _areaPotongAktif.width > 0 &&
+          _areaPotongAktif != _batasGambarPadaLayar) {
+        final cropSkalaX = lebarRotasi / _batasGambarPadaLayar.width;
+        final cropSkalaY = tinggiRotasi / _batasGambarPadaLayar.height;
+
+        final rectCrop = Rect.fromLTRB(
+          (_areaPotongAktif.left * cropSkalaX).clamp(0.0, lebarRotasi.toDouble()),
+          (_areaPotongAktif.top * cropSkalaY).clamp(0.0, tinggiRotasi.toDouble()),
+          (_areaPotongAktif.right * cropSkalaX).clamp(0.0, lebarRotasi.toDouble()),
+          (_areaPotongAktif.bottom * cropSkalaY).clamp(0.0, tinggiRotasi.toDouble()),
+        );
+
+        final lebarCrop = rectCrop.width.round();
+        final tinggiCrop = rectCrop.height.round();
+
+        if (lebarCrop > 0 && tinggiCrop > 0) {
+          final perekamCrop = ui.PictureRecorder();
+          final kanvasCrop = Canvas(perekamCrop);
+          kanvasCrop.drawImageRect(
+            gambarTransformed,
+            rectCrop,
+            Rect.fromLTWH(0, 0, lebarCrop.toDouble(), tinggiCrop.toDouble()),
+            Paint(),
+          );
+          gambarAkhir = await perekamCrop.endRecording().toImage(lebarCrop, tinggiCrop);
+        }
+      }
+
+      final byteData = await gambarAkhir.toByteData(format: ui.ImageByteFormat.png);
 
       if (byteData == null) {
-        throw Exception('Gagal mengonversi gambar ke PNG');
+        throw Exception('Gagal mengonversi gambar ke format PNG');
       }
 
       final byteUint8 = byteData.buffer.asUint8List();
