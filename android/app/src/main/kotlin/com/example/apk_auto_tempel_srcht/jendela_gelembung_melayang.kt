@@ -26,11 +26,11 @@ import android.widget.TextView
 import android.widget.Toast
 import java.io.File
 
-// [FITUR: Panel Melayang Mini ala Game Turbo Redmi & Bypass Clipboard Android 16] - Bilah samping abu-abu auto-hide 1 menit, gelembung bundar melayang, laci antrean berkas yang bisa ditarik ke atas (expandable scroll), dan bypass window overlay
+// [FITUR: Panel Melayang Mini ala Game Turbo Redmi & Bypass Clipboard Android 16] - Bilah samping abu-abu auto-hide 25 detik, gelembung bundar melayang, laci antrean berkas yang bisa ditarik ke atas (expandable scroll), dan bypass window overlay
 object JendelaGelembungMelayang {
 
     private const val TAG = "JendelaGelembung"
-    private const val DURASI_AUTO_HIDE_MS = 60_000L // 1 Menit auto-hide
+    private const val DURASI_AUTO_HIDE_MS = 25_000L // 25 Detik auto-hide
 
     private var pengelolaJendela: WindowManager? = null
     private var tampilanAktif: View? = null
@@ -49,13 +49,14 @@ object JendelaGelembungMelayang {
     private var posisiGelembungX = 0
     private var posisiGelembungY = 300
 
-    // [FITUR: Timer Otomatis Sembunyi 1 Menit]
+    // [FITUR: Timer Otomatis Sembunyi 25 Detik] - Menutup laci dan mengubah gelembung ke bilah samping abu-abu saat 25 detik inaktivitas
     private val tugasOtomatisSembunyi = Runnable {
-        if (!laciSedangTerbuka && !sedangDalamModeBilahSamping && tampilanAktif != null) {
-            konteksAplikasi?.let { k ->
-                ubahKeModeBilahSamping(k)
-            }
+        val konteks = konteksAplikasi ?: return@Runnable
+        if (sedangDalamModeBilahSamping) {
+            return@Runnable
         }
+        Log.i(TAG, "Inaktivitas 25 detik: menyembunyikan tampilan ke bilah samping Game Turbo")
+        ubahKeModeBilahSamping(konteks)
     }
 
     // [FITUR: Reset Timer Inaktivitas] - Memperpanjang durasi aktif setiap ada sentuhan atau screenshot baru
@@ -152,7 +153,20 @@ object JendelaGelembungMelayang {
 
     // [FITUR: Mode Bilah Samping Game Turbo Redmi] - Garis abu-abu persegi panjang kecil di tepi layar
     private fun ubahKeModeBilahSamping(konteks: Context) {
+        konteksAplikasi = konteks.applicationContext
+        if (pengelolaJendela == null) {
+            pengelolaJendela = konteks.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        }
         val wm = pengelolaJendela ?: return
+
+        // 1. Pastikan laci antrean tertutup dan terlepas dari window manager jika sedang terbuka
+        tampilanLaciAntrean?.let {
+            try { wm.removeView(it) } catch (_: Exception) {}
+        }
+        tampilanLaciAntrean = null
+        laciSedangTerbuka = false
+
+        // 2. Lepas tampilan gelembung bulat aktif sebelumnya
         tampilanAktif?.let {
             try { wm.removeView(it) } catch (_: Exception) {}
             tampilanAktif = null
