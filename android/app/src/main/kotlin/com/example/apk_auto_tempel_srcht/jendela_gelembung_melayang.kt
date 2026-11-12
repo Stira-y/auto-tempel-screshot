@@ -563,9 +563,14 @@ object JendelaGelembungMelayang {
             tataLetakHeader.addView(pemisahSalin)
         }
 
-        // Tombol Kirim Semua
-        val tombolKirimSemua = TextView(konteks).apply {
-            text = "Kirim Semua"
+        // Tombol Kirim Semua / Kirim Terpilih
+        val tombolKirim = TextView(konteks).apply {
+            val jumlahTerpilih = kumpulanJalurTerpilih.size
+            text = if (modePilihBeberapa) {
+                if (jumlahTerpilih > 0) "Kirim ($jumlahTerpilih)" else "Kirim"
+            } else {
+                "Kirim Semua"
+            }
             setTextColor(Color.parseColor("#4ADE80"))
             textSize = 11f
             val pX = dpKePx(7)
@@ -578,10 +583,19 @@ object JendelaGelembungMelayang {
             }
             background = latar
             setOnClickListener {
-                PengelolaBrankas.bagikanSemuaAntrean(konteks)
+                aturUlangTimerInaktivitas()
+                if (modePilihBeberapa) {
+                    if (kumpulanJalurTerpilih.isEmpty()) {
+                        Toast.makeText(konteks, "Pilih minimal 1 gambar terlebih dahulu", Toast.LENGTH_SHORT).show()
+                    } else {
+                        PengelolaBrankas.bagikanBanyakGambar(konteks, kumpulanJalurTerpilih.toList())
+                    }
+                } else {
+                    PengelolaBrankas.bagikanSemuaAntrean(konteks)
+                }
             }
         }
-        tataLetakHeader.addView(tombolKirimSemua)
+        tataLetakHeader.addView(tombolKirim)
 
         val pemisah2 = View(konteks).apply { layoutParams = LinearLayout.LayoutParams(dpKePx(5), 1) }
         tataLetakHeader.addView(pemisah2)
@@ -682,7 +696,7 @@ object JendelaGelembungMelayang {
         }
     }
 
-    // [FITUR: Pembuat Kartu Thumbnail Interaktif] - Checkbox pojok kiri atas (mode pilih), klik 2 kali salin, tekan lama menu pop up simpan & edit
+    // [FITUR: Pembuat Kartu Thumbnail Interaktif] - Checkbox pojok kiri atas (mode pilih), klik 2 kali buka pratinjau foto jelas di pop up, tekan lama menu pop up simpan & edit
     private fun buatKartuThumbnail(
         konteks: Context,
         butir: ButirScreenshot,

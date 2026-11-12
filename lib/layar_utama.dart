@@ -688,7 +688,7 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
                   const SizedBox(width: 6),
 
                   // Tombol Salin Terpilih (jika dalam mode pilih beberapa)
-                  if (_modePilihBeberapa)
+                  if (_modePilihBeberapa) ...[
                     ElevatedButton.icon(
                       onPressed: () async {
                         if (_kumpulanJalurTerpilih.isEmpty) {
@@ -724,8 +724,32 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
-                    )
-                  else
+                    ),
+                    const SizedBox(width: 6),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        if (_kumpulanJalurTerpilih.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Pilih minimal 1 gambar terlebih dahulu')),
+                          );
+                          return;
+                        }
+                        await SaluranPenghubungNative.bagikanBanyakGambar(_kumpulanJalurTerpilih.toList());
+                      },
+                      icon: const Icon(Icons.share, size: 12),
+                      label: Text(
+                        _kumpulanJalurTerpilih.isEmpty ? 'Kirim' : 'Kirim (${_kumpulanJalurTerpilih.length})',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ] else
                     ElevatedButton.icon(
                       onPressed: SaluranPenghubungNative.bagikanSemuaAntrean,
                       icon: const Icon(Icons.share, size: 14),
@@ -807,7 +831,7 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
     );
   }
 
-  // [FITUR: Kartu Thumbnail Screenshot Interaktif] - Checkbox pojok kiri atas (mode pilih), klik 2 kali salin, tekan lama menu pop up simpan & edit
+  // [FITUR: Kartu Thumbnail Screenshot Interaktif] - Checkbox pojok kiri atas (mode pilih), klik 2 kali buka pratinjau foto jelas di pop up, tekan lama menu pop up simpan & edit
   Widget _bangunKartuThumbnail(ModelBerkasGambar butir) {
     final terpilih = _kumpulanJalurTerpilih.contains(butir.jalurBerkas);
 

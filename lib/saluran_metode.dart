@@ -107,6 +107,19 @@ class SaluranPenghubungNative {
     }
   }
 
+  // [FITUR: Bagikan Gambar Terpilih] - Membagikan beberapa gambar pilihan saja ke WhatsApp atau aplikasi lain
+  static Future<bool> bagikanBanyakGambar(List<String> daftarJalur) async {
+    try {
+      final sukses = await _saluranMetode.invokeMethod<bool>(
+        'bagikanBanyakGambar',
+        {'daftarJalur': daftarJalur},
+      );
+      return sukses ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // [FITUR: Simpan Satu Gambar Langsung ke Galeri Publik] - Menyimpan berkas dari brankas ke Galeri (Pictures/AutoTempelEdit)
   static Future<bool> simpanGambarKeGaleriPublik(String jalurBerkas) async {
     try {

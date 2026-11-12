@@ -132,6 +132,11 @@ class MainActivity : FlutterActivity() {
                         val sukses = PengelolaBrankas.salinBanyakGambarKePapanKlip(this, daftarJalur)
                         hasil.success(sukses)
                     }
+                    "bagikanBanyakGambar" -> {
+                        val daftarJalur = panggilan.argument<List<String>>("daftarJalur") ?: emptyList()
+                        val sukses = PengelolaBrankas.bagikanBanyakGambar(this, daftarJalur)
+                        hasil.success(sukses)
+                    }
                     "simpanGambarKeGaleriPublik" -> {
                         val jalurBerkas = panggilan.argument<String>("jalurBerkas") ?: ""
                         val sukses = PengelolaBrankas.simpanGambarKeGaleriPublik(this, jalurBerkas)

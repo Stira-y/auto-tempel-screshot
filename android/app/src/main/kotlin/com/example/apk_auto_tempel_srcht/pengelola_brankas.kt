@@ -1,6 +1,7 @@
 package com.example.apk_auto_tempel_srcht
 
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
@@ -311,7 +312,7 @@ object PengelolaBrankas {
         }
     }
 
-    // [FITUR: Salin Banyak Gambar Sekaligus ke Papan Klip] - Menyalin beberapa gambar yang dipilih ke clipboard
+    // [FITUR: Salin Banyak Gambar Sekaligus ke Papan Klip] - Menyalin sejumlah gambar terpilih ke clipboard (1 gambar = 1 item, banyak gambar = multi-item dengan izin URI penuh)
     fun salinBanyakGambarKePapanKlip(
         konteks: Context,
         daftarJalur: List<String>,
@@ -331,23 +332,57 @@ object PengelolaBrankas {
 
         if (daftarUri.isEmpty()) return false
 
+        // [FITUR: Pemberian Izin URI ke Aplikasi Target] - Memastikan aplikasi seperti WhatsApp, Telegram, Google Docs dapat membaca seluruh berkas URI
+        val daftarPaketPopuler = listOf(
+            "com.whatsapp",
+            "com.whatsapp.w4b",
+            "org.telegram.messenger",
+            "org.telegram.plus",
+            "com.google.android.apps.messaging",
+            "com.google.android.apps.docs",
+            "com.facebook.orca",
+            "com.instagram.android"
+        )
+        for (paket in daftarPaketPopuler) {
+            for (uri in daftarUri) {
+                try {
+                    konteks.grantUriPermission(paket, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Exception) {}
+            }
+        }
+
         try {
             JendelaGelembungMelayang.tampilkanOverlayFokusSesaat(konteks) {
                 try {
                     val manajerPapanKlip = konteks.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val klip = ClipData.newUri(konteks.contentResolver, "Screenshot Terpilih", daftarUri.first())
-                    for (i in 1 until daftarUri.size) {
-                        klip.addItem(ClipData.Item(daftarUri[i]))
+                    
+                    val klip: ClipData = if (daftarUri.size == 1) {
+                        // Jika hanya 1 gambar yang dipilih: salin tepat 1 item ke clipboard
+                        ClipData.newUri(konteks.contentResolver, "Screenshot", daftarUri[0])
+                    } else {
+                        // Jika 3 (atau lebih) gambar yang dipilih: buat ClipData multi-item dengan semua tipe mime gambar
+                        val tipeMime = arrayOf("image/png", "image/jpeg", "image/*")
+                        val deskripsi = ClipDescription("Screenshot Terpilih", tipeMime)
+                        val klipMulti = ClipData(deskripsi, ClipData.Item(daftarUri[0]))
+                        for (i in 1 until daftarUri.size) {
+                            klipMulti.addItem(ClipData.Item(daftarUri[i]))
+                        }
+                        klipMulti
                     }
                     manajerPapanKlip.setPrimaryClip(klip)
 
                     if (tampilkanNotifikasi) {
                         penanganUtama.post {
-                            Toast.makeText(konteks, "${daftarUri.size} foto berhasil disalin ke papan klip!", Toast.LENGTH_SHORT).show()
+                            val pesan = if (daftarUri.size == 1) {
+                                "1 foto berhasil disalin ke papan klip!"
+                            } else {
+                                "${daftarUri.size} foto berhasil disalin ke papan klip!"
+                            }
+                            Toast.makeText(konteks, pesan, Toast.LENGTH_SHORT).show()
                         }
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Gagal menyalin banyak gambar ke clipboard: ${e.message}")
+                    Log.e(TAG, "Gagal menyalin gambar ke clipboard: ${e.message}")
                 }
             }
             return true
@@ -355,6 +390,48 @@ object PengelolaBrankas {
             Log.e(TAG, "Terjadi kesalahan saat salin banyak: ${e.message}")
             return false
         }
+    }
+
+    // [FITUR: Bagikan Gambar Terpilih (Multi-Share)] - Membagikan beberapa gambar pilihan saja ke WhatsApp atau aplikasi lain
+    fun bagikanBanyakGambar(konteks: Context, daftarJalur: List<String>): Boolean {
+        if (daftarJalur.isEmpty()) {
+            Toast.makeText(konteks, "Pilih minimal 1 gambar terlebih dahulu!", Toast.LENGTH_SHORT).show()
+            return false
+        }
+
+        val otoritas = "${konteks.packageName}.penyedia_berkas"
+        val daftarUri = ArrayList<Uri>()
+
+        for (jalur in daftarJalur) {
+            val berkas = File(jalur)
+            if (berkas.exists()) {
+                val uriKonten = FileProvider.getUriForFile(konteks, otoritas, berkas)
+                daftarUri.add(uriKonten)
+            }
+        }
+
+        if (daftarUri.isEmpty()) return false
+
+        val niatKirim = Intent().apply {
+            if (daftarUri.size == 1) {
+                action = Intent.ACTION_SEND
+                putExtra(Intent.EXTRA_STREAM, daftarUri[0])
+            } else {
+                action = Intent.ACTION_SEND_MULTIPLE
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, daftarUri)
+            }
+            type = "image/*"
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        val judul = if (daftarUri.size == 1) "Kirim 1 Foto Terpilih" else "Kirim ${daftarUri.size} Foto Terpilih"
+        val niatPemilih = Intent.createChooser(niatKirim, judul).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        konteks.startActivity(niatPemilih)
+        return true
     }
 
     // [FITUR: Simpan Satu Gambar dari Brankas Langsung ke Galeri Publik] - Opsi tekan lama: simpan ke galeri tanpa edit
