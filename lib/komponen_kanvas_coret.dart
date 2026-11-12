@@ -66,3 +66,4 @@ class PelukisCoretan extends CustomPainter {
   @override
   bool shouldRepaint(covariant PelukisCoretan oldDelegate) => true;
 }
+

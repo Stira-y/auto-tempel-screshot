@@ -223,10 +223,10 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
         elevation: 0,
         title: const Row(
           children: [
-            Icon(Icons.auto_awesome, color: Color(0xFF38BDF8), size: 22),
+            Icon(Icons.content_cut, color: Color(0xFF00A651), size: 22),
             SizedBox(width: 8),
             Text(
-              'Auto-Tempel Screenshot',
+              'Take & Paste',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
             ),
           ],
