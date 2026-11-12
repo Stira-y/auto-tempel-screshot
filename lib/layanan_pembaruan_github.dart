@@ -22,7 +22,7 @@ class InformasiPembaruanGitHub {
 // [FITUR: Layanan Pemeriksa Pembaruan GitHub] - Menghubungkan aplikasi langsung ke repositori GitHub untuk mendeteksi update terbaru setelah push
 class LayananPembaruanGitHub {
   // [IDENTITAS VERSI SAAT INI] - Kode commit SHA versi lokal saat ini
-  static const String kodeKomitLokalSaatIni = "7dd4ebd";
+  static const String kodeKomitLokalSaatIni = "663a8d3";
   static const String tautanRepositoriUtama = "https://github.com/Stira-y/auto-tempel-screshot";
   static const String titikAksesApiGithub = "https://api.github.com/repos/Stira-y/auto-tempel-screshot/commits/main";
 
