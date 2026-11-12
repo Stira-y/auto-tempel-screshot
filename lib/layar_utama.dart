@@ -226,7 +226,7 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
             Icon(Icons.content_cut, color: Color(0xFF00A651), size: 22),
             SizedBox(width: 8),
             Text(
-              'Take & Paste',
+              'Take & paste',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
             ),
           ],

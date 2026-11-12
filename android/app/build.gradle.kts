@@ -5,6 +5,10 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+base {
+    archivesName.set("Take & paste")
+}
+
 android {
     namespace = "com.example.apk_auto_tempel_srcht"
     compileSdk = 36

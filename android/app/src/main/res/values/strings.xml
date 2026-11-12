@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- [FITUR: Nama Baku Aplikasi] - Base name aplikasi Android -->
+    <string name="app_name">Take &amp; paste</string>
+</resources>
