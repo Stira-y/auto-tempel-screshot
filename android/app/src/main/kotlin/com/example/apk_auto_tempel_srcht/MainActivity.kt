@@ -137,6 +137,18 @@ class MainActivity : FlutterActivity() {
                         val sukses = PengelolaBrankas.simpanGambarKeGaleriPublik(this, jalurBerkas)
                         hasil.success(sukses)
                     }
+                    "deteksiTeksDariGambar" -> {
+                        val jalurBerkas = panggilan.argument<String>("jalurBerkas") ?: ""
+                        PengenalTeksOcr.deteksiTeksDariBerkas(this, jalurBerkas) { sukses, teksLengkap, daftarBaris ->
+                            hasil.success(
+                                mapOf(
+                                    "sukses" to sukses,
+                                    "teks" to teksLengkap,
+                                    "daftarBaris" to daftarBaris
+                                )
+                            )
+                        }
+                    }
                     "bagikanSemuaAntrean" -> {
                         val sukses = PengelolaBrankas.bagikanSemuaAntrean(this)
                         hasil.success(sukses)

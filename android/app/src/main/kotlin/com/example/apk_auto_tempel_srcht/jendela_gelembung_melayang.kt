@@ -2,6 +2,7 @@ package com.example.apk_auto_tempel_srcht
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -757,15 +758,14 @@ object JendelaGelembungMelayang {
             wadahGambarRelatif.addView(tampilanCheckbox)
         }
 
-        // [FITUR: Deteksi Double Tap (Salin 1 Foto) & Long Press (Pop Up Simpan/Edit)]
+        // [FITUR: Deteksi Double Tap (Pratinjau Jelas + Pilih Teks Google Lens) & Long Press (Pop Up Simpan/Edit)]
         val detektorSentuh = GestureDetector(konteks, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent): Boolean = true
 
-            // [FITUR: Klik 2 Kali (Double Tap) -> Salin 1 Image + Notif]
+            // [FITUR: Klik 2 Kali (Double Tap) -> Perlihatkan Foto dengan Jelas & Pilih Teks]
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 aturUlangTimerInaktivitas()
-                PengelolaBrankas.salinGambarKePapanKlip(konteks, butir.jalurBerkas, tampilkanNotifikasi = false)
-                Toast.makeText(konteks, "Foto berhasil disalin ke papan klip!", Toast.LENGTH_SHORT).show()
+                tampilkanPratinjauFotoJelas(konteks, butir.jalurBerkas)
                 return true
             }
 
@@ -830,19 +830,22 @@ object JendelaGelembungMelayang {
         return wadahUtama
     }
 
-    // [FITUR: Dialog Opsi Foto saat Tekan Lama] - Menampilkan dialog Simpan ke Galeri dan Edit Gambar
+    private var tampilanPratinjauJelas: View? = null
+
+    // [FITUR: Dialog Opsi Foto saat Tekan Lama] - Menampilkan dialog Simpan ke Galeri dan Edit Gambar tanpa arahkan ke aplikasi
     fun tampilkanDialogOpsiFoto(konteks: Context, jalurBerkas: String) {
         penanganUtama.post {
             val builder = android.app.AlertDialog.Builder(konteks, android.R.style.Theme_DeviceDefault_Dialog_Alert)
             builder.setTitle("Opsi Foto")
-            builder.setItems(arrayOf("Simpan ke Galeri", "Edit (Crop, Coret, Mirror & Putar)")) { dialog, which ->
+            builder.setItems(arrayOf("Simpan ke Galeri", "Edit (Melayang Tanpa Buka Aplikasi)")) { dialog, which ->
                 dialog.dismiss()
                 when (which) {
                     0 -> {
                         PengelolaBrankas.simpanGambarKeGaleriPublik(konteks, jalurBerkas)
                     }
                     1 -> {
-                        bukaLayarEditorDariOverlay(konteks, jalurBerkas)
+                        // Buka editor melayang langsung di atas layar tanpa diarahkan ke aplikasi
+                        JendelaEditorMelayang.bukaEditor(konteks, jalurBerkas)
                     }
                 }
             }
@@ -861,18 +864,288 @@ object JendelaGelembungMelayang {
         }
     }
 
-    // [FITUR: Buka Layar Editor dari Overlay] - Meluncurkan MainActivity dengan rute pengeditan gambar
-    fun bukaLayarEditorDariOverlay(konteks: Context, jalurBerkas: String) {
-        try {
-            val niat = Intent(konteks, MainActivity::class.java).apply {
-                putExtra("jalur_berkas_edit", jalurBerkas)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    // [FITUR: Pratinjau Foto Jelas & Pilih Teks Google Lens] - Tekan 2x memunculkan foto resolusi penuh + tombol Pilih Teks OCR
+    fun tampilkanPratinjauFotoJelas(konteks: Context, jalurBerkas: String) {
+        penanganUtama.post {
+            val wm = konteks.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            tutupPratinjauFotoJelas()
+
+            val dpKePx = { dp: Int ->
+                TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), konteks.resources.displayMetrics).toInt()
             }
-            konteks.startActivity(niat)
-            tutupLaciAntrean()
-        } catch (e: Exception) {
-            Log.e(TAG, "Gagal membuka editor dari overlay: ${e.message}")
+
+            val tipeWindow = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                @Suppress("DEPRECATION")
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+
+            val parameterPratinjau = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                tipeWindow,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT
+            )
+
+            val wadahPratinjau = LinearLayout(konteks).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundColor(Color.parseColor("#F5000000")) // Latar hitam pekat transparan
+            }
+
+            // Bilah Atas Pratinjau
+            val bilahAtas = LinearLayout(konteks).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                val p = dpKePx(12)
+                setPadding(p, p, p, p)
+                setBackgroundColor(Color.parseColor("#E6111827"))
+            }
+
+            val tombolTutup = TextView(konteks).apply {
+                text = "✕"
+                textSize = 20f
+                setTextColor(Color.WHITE)
+                val p = dpKePx(6)
+                setPadding(p, p, p, p)
+                setOnClickListener { tutupPratinjauFotoJelas() }
+            }
+            bilahAtas.addView(tombolTutup)
+
+            val teksJudul = TextView(konteks).apply {
+                text = "Pratinjau Jelas"
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                val mLeft = dpKePx(10)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    leftMargin = mLeft
+                }
+            }
+            bilahAtas.addView(teksJudul)
+
+            // Tombol "🔍 Pilih Teks" (Google Lens style OCR)
+            val tombolPilihTeks = TextView(konteks).apply {
+                text = "🔍 Pilih Teks"
+                textSize = 12f
+                setTextColor(Color.WHITE)
+                val pX = dpKePx(12)
+                val pY = dpKePx(6)
+                setPadding(pX, pY, pX, pY)
+                val latar = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpKePx(16).toFloat()
+                    setColor(Color.parseColor("#2563EB"))
+                }
+                background = latar
+                setOnClickListener {
+                    Toast.makeText(konteks, "Mendeteksi teks dengan Google Lens...", Toast.LENGTH_SHORT).show()
+                    PengenalTeksOcr.deteksiTeksDariBerkas(konteks, jalurBerkas) { sukses, teksLengkap, _ ->
+                        if (sukses && teksLengkap.isNotBlank()) {
+                            tampilkanDialogTeksTerdeteksi(konteks, teksLengkap)
+                        } else {
+                            Toast.makeText(konteks, "Tidak ada teks terdeteksi pada gambar", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+            bilahAtas.addView(tombolPilihTeks)
+
+            val pBilah = View(konteks).apply { layoutParams = LinearLayout.LayoutParams(dpKePx(8), 1) }
+            bilahAtas.addView(pBilah)
+
+            // Tombol Salin Gambar
+            val tombolSalin = TextView(konteks).apply {
+                text = "📋 Salin"
+                textSize = 12f
+                setTextColor(Color.WHITE)
+                val pX = dpKePx(10)
+                val pY = dpKePx(6)
+                setPadding(pX, pY, pX, pY)
+                val latar = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = dpKePx(16).toFloat()
+                    setColor(Color.parseColor("#374151"))
+                }
+                background = latar
+                setOnClickListener {
+                    PengelolaBrankas.salinGambarKePapanKlip(konteks, jalurBerkas, tampilkanNotifikasi = true)
+                }
+            }
+            bilahAtas.addView(tombolSalin)
+            wadahPratinjau.addView(bilahAtas)
+
+            // Tampilan Gambar Resolusi Penuh
+            val wadahGambar = FrameLayout(konteks).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f
+                )
+            }
+
+            val tampilanGambarJelas = ImageView(konteks).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                try {
+                    val opsi = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+                    val bitmap = BitmapFactory.decodeFile(jalurBerkas, opsi)
+                    setImageBitmap(bitmap)
+                } catch (_: Exception) {
+                    setImageResource(android.R.drawable.ic_menu_gallery)
+                }
+            }
+            wadahGambar.addView(tampilanGambarJelas)
+            wadahPratinjau.addView(wadahGambar)
+
+            tampilanPratinjauJelas = wadahPratinjau
+            try {
+                wm.addView(wadahPratinjau, parameterPratinjau)
+            } catch (e: Exception) {
+                Log.e(TAG, "Gagal memunculkan pratinjau jelas: ${e.message}")
+            }
         }
+    }
+
+    // [FITUR: Dialog Teks Terdeteksi ala Google Lens] - Menampilkan teks yang bisa diseleksi per huruf/kata dan disalin
+    private fun tampilkanDialogTeksTerdeteksi(konteks: Context, teksLengkap: String) {
+        val dpKePx = { dp: Int ->
+            TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp.toFloat(), konteks.resources.displayMetrics).toInt()
+        }
+
+        val tipeWindow = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+
+        val dialogLayout = LinearLayout(konteks).apply {
+            orientation = LinearLayout.VERTICAL
+            val p = dpKePx(16)
+            setPadding(p, p, p, p)
+            val latar = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpKePx(16).toFloat()
+                setColor(Color.parseColor("#1E293B"))
+                setStroke(dpKePx(1), Color.parseColor("#38BDF8"))
+            }
+            background = latar
+        }
+
+        val header = LinearLayout(konteks).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val judulTeks = TextView(konteks).apply {
+            text = "🔍 Teks Terdeteksi (Pilih & Salin)"
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        header.addView(judulTeks)
+
+        val tombolTutupDialog = TextView(konteks).apply {
+            text = "✕"
+            setTextColor(Color.GRAY)
+            textSize = 18f
+            val p = dpKePx(4)
+            setPadding(p, p, p, p)
+        }
+        header.addView(tombolTutupDialog)
+        dialogLayout.addView(header)
+
+        val scrollTeks = ScrollView(konteks).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpKePx(200)
+            ).apply {
+                topMargin = dpKePx(12)
+                bottomMargin = dpKePx(12)
+            }
+        }
+
+        // TextView dengan setTextIsSelectable(true) sehingga pengguna bisa bebas memilih huruf/kata!
+        val teksHasilOcr = TextView(konteks).apply {
+            text = teksLengkap
+            setTextColor(Color.parseColor("#E2E8F0"))
+            textSize = 13f
+            setTextIsSelectable(true)
+            val p = dpKePx(8)
+            setPadding(p, p, p, p)
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpKePx(8).toFloat()
+                setColor(Color.parseColor("#0F172A"))
+            }
+            background = bg
+        }
+        scrollTeks.addView(teksHasilOcr)
+        dialogLayout.addView(scrollTeks)
+
+        // Tombol Salin Semua Teks
+        val tombolSalinSemua = TextView(konteks).apply {
+            text = "📋 Salin Semua Teks"
+            setTextColor(Color.WHITE)
+            textSize = 13f
+            gravity = Gravity.CENTER
+            val pY = dpKePx(10)
+            setPadding(0, pY, 0, pY)
+            val latar = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dpKePx(8).toFloat()
+                setColor(Color.parseColor("#10B981"))
+            }
+            background = latar
+            setOnClickListener {
+                val manajerPapanKlip = konteks.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val klip = android.content.ClipData.newPlainText("Teks Terdeteksi", teksLengkap)
+                manajerPapanKlip.setPrimaryClip(klip)
+                Toast.makeText(konteks, "Seluruh teks berhasil disalin ke papan klip!", Toast.LENGTH_SHORT).show()
+            }
+        }
+        dialogLayout.addView(tombolSalinSemua)
+
+        val wm = konteks.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val params = WindowManager.LayoutParams(
+            dpKePx(320),
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            tipeWindow,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.CENTER
+        }
+
+        tombolTutupDialog.setOnClickListener {
+            try { wm.removeView(dialogLayout) } catch (_: Exception) {}
+        }
+
+        try {
+            wm.addView(dialogLayout, params)
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal memunculkan dialog OCR: ${e.message}")
+        }
+    }
+
+    fun tutupPratinjauFotoJelas() {
+        penanganUtama.post {
+            val wm = pengelolaJendela ?: return@post
+            val tampilan = tampilanPratinjauJelas ?: return@post
+            try {
+                wm.removeView(tampilan)
+            } catch (_: Exception) {}
+            tampilanPratinjauJelas = null
+        }
+    }
+
+    // [FITUR: Buka Layar Editor dari Overlay] - Cadangan untuk membuka editor
+    fun bukaLayarEditorDariOverlay(konteks: Context, jalurBerkas: String) {
+        JendelaEditorMelayang.bukaEditor(konteks, jalurBerkas)
     }
 
     // [FITUR: Tutup Laci Antrean] - Menutup panel bottom drawer

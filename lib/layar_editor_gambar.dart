@@ -27,7 +27,7 @@ enum _ModeAlatEditor {
 }
 
 class _LayarEditorGambarState extends State<LayarEditorGambar> {
-  _ModeAlatEditor _modeAktif = _ModeAlatEditor.coret;
+  _ModeAlatEditor _modeAktif = _ModeAlatEditor.transformasi;
 
   // State Coret-coret
   final List<GarisCoretan> _daftarCoretan = [];

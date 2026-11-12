@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'layar_editor_gambar.dart';
 import 'layanan_pembaruan_github.dart';
 import 'model_berkas_gambar.dart';
@@ -838,18 +839,9 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
                   _bukaLayarEditor(butir);
                 }
               },
-              // [FITUR: Klik 2 Kali (Double Tap) -> Salin 1 Image + Notifikasi]
-              onDoubleTap: () async {
-                final sukses = await SaluranPenghubungNative.salinGambarKePapanKlip(butir.jalurBerkas);
-                if (sukses && mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      backgroundColor: Color(0xFF10B981),
-                      content: Text('Foto berhasil disalin ke clipboard!'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
+              // [FITUR: Klik 2 Kali (Double Tap) -> Perlihatkan Foto dengan Jelas + Pilih Teks Google Lens]
+              onDoubleTap: () {
+                _tampilkanPratinjauFotoJelas(butir);
               },
               // [FITUR: Tekan Lama (Long Press) -> Pop Up Simpan ke Galeri & Edit]
               onLongPress: () {
@@ -1027,6 +1019,229 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
                   Navigator.of(konteks).pop();
                   _bukaLayarEditor(butir);
                 },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // [FITUR: Pratinjau Foto Jelas & Pilih Teks Google Lens] - Tekan 2x memunculkan foto resolusi penuh + tombol Pilih Teks OCR
+  void _tampilkanPratinjauFotoJelas(ModelBerkasGambar butir) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.92),
+      builder: (konteks) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF1E293B).withValues(alpha: 0.9),
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.of(konteks).pop(),
+            ),
+            title: Text(
+              butir.namaBerkas,
+              style: const TextStyle(fontSize: 14, color: Colors.white),
+              overflow: TextOverflow.ellipsis,
+            ),
+            actions: [
+              // Tombol Pilih Teks (Google Lens)
+              Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: ElevatedButton.icon(
+                  onPressed: () => _jalankanDeteksiTeksOcr(butir),
+                  icon: const Icon(Icons.document_scanner, size: 16),
+                  label: const Text('Pilih Teks', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ),
+              // Tombol Salin Gambar
+              IconButton(
+                icon: const Icon(Icons.copy, color: Color(0xFF38BDF8), size: 20),
+                tooltip: 'Salin ke Clipboard',
+                onPressed: () async {
+                  final sukses = await SaluranPenghubungNative.salinGambarKePapanKlip(butir.jalurBerkas);
+                  if (sukses && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFF10B981),
+                        content: Text('Foto berhasil disalin ke clipboard!'),
+                      ),
+                    );
+                  }
+                },
+              ),
+              // Tombol Simpan ke Galeri
+              IconButton(
+                icon: const Icon(Icons.save_alt, color: Color(0xFF10B981), size: 20),
+                tooltip: 'Simpan ke Galeri',
+                onPressed: () async {
+                  final sukses = await SaluranPenghubungNative.simpanGambarKeGaleriPublik(butir.jalurBerkas);
+                  if (sukses && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFF10B981),
+                        content: Text('Foto berhasil disimpan ke galeri!'),
+                      ),
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              panEnabled: true,
+              boundaryMargin: const EdgeInsets.all(20),
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Image.file(
+                File(butir.jalurBerkas),
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // [FITUR: Deteksi Teks OCR Google Lens] - Mengekstrak teks dari screenshot secara offline dan menyajikannya dalam tampilan selectable
+  Future<void> _jalankanDeteksiTeksOcr(ModelBerkasGambar butir) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: Card(
+          color: Color(0xFF1E293B),
+          child: Padding(
+            padding: EdgeInsets.all(20.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(color: Color(0xFF38BDF8)),
+                SizedBox(width: 16),
+                Text('Mendeteksi teks dengan Google Lens...', style: TextStyle(color: Colors.white)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final hasilOcr = await SaluranPenghubungNative.deteksiTeksDariGambar(butir.jalurBerkas);
+
+    if (mounted) {
+      Navigator.of(context).pop(); // Tutup loading dialog
+
+      final sukses = hasilOcr?['sukses'] == true;
+      final teks = (hasilOcr?['teks'] as String? ?? '').trim();
+
+      if (sukses && teks.isNotEmpty) {
+        _tampilkanModalTeksTerdeteksi(teks);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Tidak ada teks yang terdeteksi pada gambar ini'),
+          ),
+        );
+      }
+    }
+  }
+
+  // [FITUR: Modal Teks Terdeteksi ala Google Lens] - Pengguna bisa memilih per huruf/kata dan menyalinnya
+  void _tampilkanModalTeksTerdeteksi(String teks) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (konteks) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(konteks).viewInsets.bottom + 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.document_scanner, color: Color(0xFF38BDF8), size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Teks Terdeteksi (Google Lens)',
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () => Navigator.of(konteks).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Tekan dan tahan pada teks di bawah untuk memilih huruf/kata tertentu, atau ketuk tombol untuk menyalin semua:',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 220),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    teks,
+                    style: const TextStyle(fontSize: 13, color: Color(0xFFE2E8F0), height: 1.4),
+                    showCursor: true,
+                    cursorColor: const Color(0xFF38BDF8),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: teks));
+                  Navigator.of(konteks).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      backgroundColor: Color(0xFF10B981),
+                      content: Text('Seluruh teks berhasil disalin ke clipboard!'),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.copy, size: 16),
+                label: const Text('Salin Semua Teks'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
               ),
             ],
           ),

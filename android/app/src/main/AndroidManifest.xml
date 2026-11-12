@@ -37,6 +37,11 @@
             </intent-filter>
         </activity>
 
+        <!-- [FITUR: Google ML Kit OCR On-Device] - Deteksi teks offline ala Google Lens -->
+        <meta-data
+            android:name="com.google.ml.vision.DEPENDENCIES"
+            android:value="ocr" />
+
         <!-- [FITUR: Layanan Latar Depan Pemantauan Screenshot] - Android 16 Special Use Foreground Service -->
         <service
             android:name=".LayananTangkapanLayar"

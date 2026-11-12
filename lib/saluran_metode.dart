@@ -120,6 +120,20 @@ class SaluranPenghubungNative {
     }
   }
 
+  // [FITUR: Deteksi Teks OCR Google Lens] - Mengekstrak teks dari berkas gambar 100% offline
+  static Future<Map<String, dynamic>?> deteksiTeksDariGambar(String jalurBerkas) async {
+    try {
+      final hasil = await _saluranMetode.invokeMethod<Map<dynamic, dynamic>>(
+        'deteksiTeksDariGambar',
+        {'jalurBerkas': jalurBerkas},
+      );
+      if (hasil == null) return null;
+      return hasil.map((k, v) => MapEntry(k.toString(), v));
+    } catch (_) {
+      return null;
+    }
+  }
+
   // [FITUR: Bagikan Seluruh Antrean Sekaligus] - Mengirim seluruh gambar antrean ke WhatsApp
   static Future<bool> bagikanSemuaAntrean() async {
     try {
