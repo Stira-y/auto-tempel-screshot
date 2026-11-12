@@ -17,7 +17,6 @@ import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
-import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -31,15 +30,17 @@ data class ButirScreenshot(
     val ukuranBerkasByte: Long
 )
 
-// [FITUR: Pengelola Brankas Privat] - Mengelola penyimpanan berkas lokal, antrean 10 gambar, pembersihan otomatis, dan clipboard
+// [FITUR: Pengelola Brankas Privat] - Mengelola penyimpanan tak terbatas dengan retensi 30 hari, pembersihan berkas usang, dan integrasi clipboard
 object PengelolaBrankas {
 
     private const val TAG = "PengelolaBrankas"
     private const val NAMA_DIREKTORI_BRANKAS = "brankas_screenshot"
-    private const val BATAS_MAKSIMAL_ANTREAN = 10
     const val FOLDER_GALERI_HASIL_EDIT = "AutoTempelEdit"
 
-    // [FITUR: Daftar Antrean Memori] - Menyimpan hingga 10 riwayat tangkapan layar aktif
+    // [FITUR: Masa Retensi 30 Hari] - Berkas yang berusia lebih dari 30 hari otomatis dibersihkan
+    const val MASA_SIMPAN_30_HARI_MS = 30L * 24 * 60 * 60 * 1000L
+
+    // [FITUR: Daftar Antrean Memori Tak Terbatas] - Menyimpan riwayat tangkapan layar aktif
     private val daftarAntrean = mutableListOf<ButirScreenshot>()
     private var pendengarPerubahanAntrean: ((List<ButirScreenshot>) -> Unit)? = null
     private val penanganUtama = Handler(Looper.getMainLooper())
@@ -58,19 +59,36 @@ object PengelolaBrankas {
         return direktori
     }
 
-    // [FITUR: Sinkronisasi Antrean Lokal] - Membaca berkas fisik yang ada di brankas ke dalam antrean memori
+    // [FITUR: Sinkronisasi Antrean & Pembersihan 30 Hari] - Membaca berkas brankas dan menghapus berkas yang lebih dari 30 hari
     fun sinkronkanAntreanDariPenyimpanan(konteks: Context): List<ButirScreenshot> {
         val direktori = dapatkanDirektoriBrankas(konteks)
         val daftarBerkas = direktori.listFiles { berkas ->
             berkas.isFile && (berkas.name.endsWith(".png", true) || berkas.name.endsWith(".jpg", true))
         } ?: emptyArray()
 
-        // Urutkan berdasarkan waktu terakhir diubah (terbaru di depan)
-        daftarBerkas.sortByDescending { it.lastModified() }
+        val batasWaktuKedaluwarsa = System.currentTimeMillis() - MASA_SIMPAN_30_HARI_MS
+        val berkasValid = mutableListOf<File>()
+
+        // Hapus file yang sudah berusia lebih dari 30 hari
+        for (berkas in daftarBerkas) {
+            if (berkas.lastModified() < batasWaktuKedaluwarsa) {
+                Log.i(TAG, "Menghapus screenshot usang (>30 hari): ${berkas.name}")
+                try {
+                    berkas.delete()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Gagal menghapus berkas usang: ${e.message}")
+                }
+            } else {
+                berkasValid.add(berkas)
+            }
+        }
+
+        // Urutkan berdasarkan waktu terakhir diubah (terbaru di paling atas)
+        berkasValid.sortByDescending { it.lastModified() }
 
         synchronized(daftarAntrean) {
             daftarAntrean.clear()
-            for (berkas in daftarBerkas.take(BATAS_MAKSIMAL_ANTREAN)) {
+            for (berkas in berkasValid) {
                 daftarAntrean.add(
                     ButirScreenshot(
                         idBerkas = berkas.name,
@@ -81,19 +99,13 @@ object PengelolaBrankas {
                     )
                 )
             }
-            // Hapus berkas berlebih jika melebihi batas 10
-            if (daftarBerkas.size > BATAS_MAKSIMAL_ANTREAN) {
-                for (indeks in BATAS_MAKSIMAL_ANTREAN until daftarBerkas.size) {
-                    daftarBerkas[indeks].delete()
-                }
-            }
         }
 
         beriTahuPerubahanAntrean()
         return dapatkanDaftarAntreanSaatIni()
     }
 
-    // [FITUR: Dapatkan Salinan Antrean Saat Ini] - Mengembalikan daftar butir screenshot yang aktif
+    // [FITUR: Dapatkan Salinan Antrean Saat Ini] - Mengembalikan daftar butir screenshot yang aktif (tanpa batasan)
     fun dapatkanDaftarAntreanSaatIni(): List<ButirScreenshot> {
         synchronized(daftarAntrean) {
             return ArrayList(daftarAntrean)
@@ -121,7 +133,6 @@ object PengelolaBrankas {
     ): ButirScreenshot? {
         // [VALIDASI: Pengecualian Folder Edit] - Pastikan hasil simpanan editor TIDAK ikut terpindah/terhapus
         if (jalurAsal != null && jalurAsal.contains(FOLDER_GALERI_HASIL_EDIT, ignoreCase = true)) {
-            Log.d(TAG, "Mengabaikan gambar dari folder $FOLDER_GALERI_HASIL_EDIT: $jalurAsal")
             return null
         }
 
@@ -151,8 +162,16 @@ object PengelolaBrankas {
             }
             aliranMasuk.close()
 
-            // [FITUR: Hapus Senyap File Asli dari Galeri] - Menggunakan akses file penuh agar galeri HP tetap bersih
-            hapusBerkasAsliSecaraSenyap(konteks, uriAsal, jalurAsal)
+            // [PENCEGAHAN BUG]: Aktifkan flag pencegahan rekursi saat menghapus file asli dari MediaStore
+            PengamatMediaScreenshot.sedangMemprosesPenghapusan.set(true)
+            try {
+                hapusBerkasAsliSecaraSenyap(konteks, uriAsal, jalurAsal)
+            } finally {
+                // Beri jeda kecil agar ContentObserver mengabaikan event penghapusan
+                penanganUtama.postDelayed({
+                    PengamatMediaScreenshot.sedangMemprosesPenghapusan.set(false)
+                }, 500)
+            }
 
             // Buat butir screenshot baru
             val butirBaru = ButirScreenshot(
@@ -163,17 +182,9 @@ object PengelolaBrankas {
                 ukuranBerkasByte = berkasTujuan.length()
             )
 
-            // Masukkan ke antrean paling depan (indeks 0)
+            // Masukkan ke antrean paling depan (indeks 0) tanpa batasan 10 gambar
             synchronized(daftarAntrean) {
                 daftarAntrean.add(0, butirBaru)
-                // Jika melebihi batas 10 gambar, hapus yang paling usang
-                while (daftarAntrean.size > BATAS_MAKSIMAL_ANTREAN) {
-                    val butirUsang = daftarAntrean.removeAt(daftarAntrean.size - 1)
-                    val berkasUsang = File(butirUsang.jalurBerkas)
-                    if (berkasUsang.exists()) {
-                        berkasUsang.delete()
-                    }
-                }
             }
 
             beriTahuPerubahanAntrean()
@@ -188,7 +199,7 @@ object PengelolaBrankas {
         }
     }
 
-    // [FITUR: Hapus File Asli Senyap] - Menghapus file dari MediaStore dan File System tanpa pop-up dialog
+    // [FITUR: Hapus File Asli Senyap] - Menghapus file dari MediaStore dan File System tanpa dialog konfirmasi
     private fun hapusBerkasAsliSecaraSenyap(konteks: Context, uriAsal: Uri?, jalurAsal: String?) {
         try {
             if (uriAsal != null) {
@@ -255,6 +266,7 @@ object PengelolaBrankas {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 manajerPapanKlip.clearPrimaryClip()
             } else {
+                @Suppress("DEPRECATION")
                 manajerPapanKlip.setPrimaryClip(ClipData.newPlainText("", ""))
             }
         } catch (e: Exception) {
@@ -285,7 +297,7 @@ object PengelolaBrankas {
 
                     if (tampilkanNotifikasi) {
                         penanganUtama.post {
-                            Toast.makeText(konteks, "Screenshot tersalin ke clipboard!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(konteks, "Screenshot disalin ke papan klip!", Toast.LENGTH_SHORT).show()
                         }
                     }
                 } catch (e: Exception) {
@@ -299,7 +311,7 @@ object PengelolaBrankas {
         }
     }
 
-    // [FITUR: Bagikan Seluruh Antrean (Multi-Share)] - Membagikan hingga 10 gambar sekaligus ke WhatsApp/aplikasi lain
+    // [FITUR: Bagikan Seluruh Antrean (Multi-Share)] - Membagikan seluruh gambar sekaligus ke WhatsApp/aplikasi lain
     fun bagikanSemuaAntrean(konteks: Context): Boolean {
         val antrean = dapatkanDaftarAntreanSaatIni()
         if (antrean.isEmpty()) {
@@ -330,7 +342,7 @@ object PengelolaBrankas {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
-        val niatPemilih = Intent.createChooser(niatKirim, "Kirim ${daftarUri.size} Screenshot").apply {
+        val niatPemilih = Intent.createChooser(niatKirim, "Kirim ${daftarUri.size} Foto Screenshot").apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
@@ -399,4 +411,3 @@ object PengelolaBrankas {
         }
     }
 }
-

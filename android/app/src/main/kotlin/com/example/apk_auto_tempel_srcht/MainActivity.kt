@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -29,33 +30,12 @@ class MainActivity : FlutterActivity() {
         private val penanganUtama = Handler(Looper.getMainLooper())
 
         // [FITUR: Pemancar Peristiwa ke Flutter UI]
-        fun kirimPeristiwaDetikBerkurang(sisaDetik: Int) {
-            penanganUtama.post {
-                pemancarPeristiwa?.success(
-                    mapOf(
-                        "jenis" to "detik_berkurang",
-                        "sisaDetik" to sisaDetik
-                    )
-                )
-            }
-        }
-
         fun kirimPeristiwaAntreanDiperbarui(antrean: List<Map<String, Any>>) {
             penanganUtama.post {
                 pemancarPeristiwa?.success(
                     mapOf(
                         "jenis" to "antrean_diperbarui",
                         "antrean" to antrean
-                    )
-                )
-            }
-        }
-
-        fun kirimPeristiwaTimerKadaluarsa() {
-            penanganUtama.post {
-                pemancarPeristiwa?.success(
-                    mapOf(
-                        "jenis" to "timer_kadaluarsa"
                     )
                 )
             }
@@ -100,8 +80,7 @@ class MainActivity : FlutterActivity() {
                         hasil.success(true)
                     }
                     "mulaiLayanan" -> {
-                        val durasiDetik = panggilan.argument<Int>("durasiDetik") ?: LayananTangkapanLayar.DURASI_DEFAULT_DETIK
-                        mulaiLayananLatarDepan(durasiDetik)
+                        mulaiLayananLatarDepan()
                         hasil.success(true)
                     }
                     "hentikanLayanan" -> {
@@ -110,14 +89,6 @@ class MainActivity : FlutterActivity() {
                     }
                     "statusLayanan" -> {
                         hasil.success(LayananTangkapanLayar.layananSedangBerjalan)
-                    }
-                    "aturDurasiTimer" -> {
-                        val durasiDetik = panggilan.argument<Int>("durasiDetik") ?: LayananTangkapanLayar.DURASI_DEFAULT_DETIK
-                        aturDurasiTimer(durasiDetik)
-                        hasil.success(true)
-                    }
-                    "dapatkanSisaWaktu" -> {
-                        hasil.success(LayananTangkapanLayar.sisaWaktuDetikSaatIni)
                     }
                     "dapatkanDaftarAntrean" -> {
                         PengelolaBrankas.sinkronkanAntreanDariPenyimpanan(this)
@@ -151,6 +122,17 @@ class MainActivity : FlutterActivity() {
                         PengelolaBrankas.kosongkanBrankas(this)
                         hasil.success(true)
                     }
+                    "bukaTautanWeb" -> {
+                        val url = panggilan.argument<String>("url") ?: "https://github.com/Stira-y/auto-tempel-screshot"
+                        bukaTautanBrowser(url)
+                        hasil.success(true)
+                    }
+                    "aturDurasiTimer" -> {
+                        hasil.success(true)
+                    }
+                    "dapatkanSisaWaktu" -> {
+                        hasil.success(0)
+                    }
                     else -> hasil.notImplemented()
                 }
             }
@@ -160,9 +142,7 @@ class MainActivity : FlutterActivity() {
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                     pemancarPeristiwa = events
-                    // Kirim status awal
                     kirimPeristiwaStatusLayanan(LayananTangkapanLayar.layananSedangBerjalan)
-                    kirimPeristiwaDetikBerkurang(LayananTangkapanLayar.sisaWaktuDetikSaatIni)
                     kirimPeristiwaAntreanDiperbarui(PengelolaBrankas.dapatkanAntreanSebagaiPeta())
 
                     PengelolaBrankas.aturPendengarPerubahan { antrean ->
@@ -270,10 +250,9 @@ class MainActivity : FlutterActivity() {
     }
 
     // [FITUR: Mulai Layanan Foreground] - Mengirim Intent START ke LayananTangkapanLayar
-    private fun mulaiLayananLatarDepan(durasiDetik: Int) {
+    private fun mulaiLayananLatarDepan() {
         val niat = Intent(this, LayananTangkapanLayar::class.java).apply {
             action = LayananTangkapanLayar.AKSI_MULAI
-            putExtra(LayananTangkapanLayar.EKSTRA_DURASI_DETIK, durasiDetik)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(niat)
@@ -290,12 +269,15 @@ class MainActivity : FlutterActivity() {
         startService(niat)
     }
 
-    // [FITUR: Atur Durasi Timer] - Memperbarui batas durasi kadaluarsa layanan
-    private fun aturDurasiTimer(durasiDetik: Int) {
-        val niat = Intent(this, LayananTangkapanLayar::class.java).apply {
-            action = LayananTangkapanLayar.AKSI_ATUR_DURASI
-            putExtra(LayananTangkapanLayar.EKSTRA_DURASI_DETIK, durasiDetik)
+    // [FITUR: Buka Tautan Browser] - Membuka tautan repositori GitHub di browser pengguna
+    private fun bukaTautanBrowser(tautan: String) {
+        try {
+            val niat = Intent(Intent.ACTION_VIEW, Uri.parse(tautan)).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(niat)
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Gagal membuka browser: ${e.message}")
         }
-        startService(niat)
     }
 }

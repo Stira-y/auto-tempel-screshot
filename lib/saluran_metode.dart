@@ -37,10 +37,10 @@ class SaluranPenghubungNative {
     await _saluranMetode.invokeMethod('mintaAbaikanPenghematBaterai');
   }
 
-  // [FITUR: Menjalankan Layanan Latar Depan] - Memulai LayananTangkapanLayar dengan durasi timer tertentu
-  static Future<bool> mulaiLayanan(int durasiDetik) async {
+  // [FITUR: Menjalankan Layanan Latar Depan] - Memulai LayananTangkapanLayar untuk pemantauan terus-menerus
+  static Future<bool> mulaiLayanan([int durasiDetik = 0]) async {
     try {
-      final sukses = await _saluranMetode.invokeMethod<bool>('mulaiLayanan', {'durasiDetik': durasiDetik});
+      final sukses = await _saluranMetode.invokeMethod<bool>('mulaiLayanan');
       return sukses ?? false;
     } catch (_) {
       return false;
@@ -67,22 +67,7 @@ class SaluranPenghubungNative {
     }
   }
 
-  // [FITUR: Pengaturan Durasi Timer] - Mengubah batas waktu kadaluarsa brankas
-  static Future<void> aturDurasiTimer(int durasiDetik) async {
-    await _saluranMetode.invokeMethod('aturDurasiTimer', {'durasiDetik': durasiDetik});
-  }
-
-  // [FITUR: Mengambil Sisa Waktu Hitung Mundur] - Mendapatkan detik tersisa dari layanan native
-  static Future<int> dapatkanSisaWaktuDetik() async {
-    try {
-      final sisa = await _saluranMetode.invokeMethod<int>('dapatkanSisaWaktu');
-      return sisa ?? 0;
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  // [FITUR: Mengambil Daftar Antrean Brankas] - Membaca hingga 10 screenshot aktif di brankas privat
+  // [FITUR: Mengambil Daftar Antrean Brankas] - Membaca seluruh screenshot aktif di brankas privat tanpa batasan
   static Future<List<ModelBerkasGambar>> dapatkanDaftarAntrean() async {
     try {
       final hasil = await _saluranMetode.invokeMethod<List<dynamic>>('dapatkanDaftarAntrean');
@@ -109,7 +94,7 @@ class SaluranPenghubungNative {
     }
   }
 
-  // [FITUR: Bagikan Seluruh Antrean Sekaligus] - Mengirim hingga 10 gambar antrean ke WhatsApp
+  // [FITUR: Bagikan Seluruh Antrean Sekaligus] - Mengirim seluruh gambar antrean ke WhatsApp
   static Future<bool> bagikanSemuaAntrean() async {
     try {
       final sukses = await _saluranMetode.invokeMethod<bool>('bagikanSemuaAntrean');
@@ -158,9 +143,18 @@ class SaluranPenghubungNative {
     }
   }
 
-  // [FITUR: Aliran Peristiwa Realtime] - Menerima broadcast detik berkurang, antrean berubah, dan timer habis
+  // [FITUR: Buka Tautan Eksternal] - Membuka tautan GitHub atau web di browser eksternal
+  static Future<bool> bukaTautanWeb(String tautanUrl) async {
+    try {
+      final sukses = await _saluranMetode.invokeMethod<bool>('bukaTautanWeb', {'url': tautanUrl});
+      return sukses ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // [FITUR: Aliran Peristiwa Realtime] - Menerima broadcast pembaruan antrean dan status layanan dari native
   static Stream<dynamic> dengarkanPeristiwa() {
     return _saluranPeristiwa.receiveBroadcastStream();
   }
 }
-

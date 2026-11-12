@@ -7,15 +7,15 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Build
-import android.os.CountDownTimer
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import androidx.core.app.NotificationCompat
 
-// [FITUR: Layanan Latar Depan Pemantauan Screenshot] - Menjaga aplikasi tetap aktif di latar belakang dengan foreground service khusus Android 16 untuk memantau screenshot dan mengelola timer kadaluarsa
+// [FITUR: Layanan Latar Depan Pemantauan Screenshot] - Menjaga aplikasi tetap aktif di latar belakang dengan foreground service khusus Android 16 untuk memantau screenshot baru dan retensi 30 hari
 class LayananTangkapanLayar : Service() {
 
     companion object {
@@ -25,41 +25,35 @@ class LayananTangkapanLayar : Service() {
 
         const val AKSI_MULAI = "AKSI_MULAI"
         const val AKSI_HENTIKAN = "AKSI_HENTIKAN"
-        const val AKSI_ATUR_DURASI = "AKSI_ATUR_DURASI"
-        const val EKSTRA_DURASI_DETIK = "EKSTRA_DURASI_DETIK"
-
-        private const val NAMA_PREFERENSI = "preferensi_auto_tempel"
-        private const val KUNCI_DURASI_TIMER = "durasi_timer_detik"
-        const val DURASI_DEFAULT_DETIK = 180 // 3 Menit
 
         var layananSedangBerjalan = false
-            private set
-
-        var sisaWaktuDetikSaatIni = DURASI_DEFAULT_DETIK
             private set
     }
 
     private var pengamatMedia: PengamatMediaScreenshot? = null
-    private var penghitungMundur: CountDownTimer? = null
-    private var durasiTimerMaksimalDetik = DURASI_DEFAULT_DETIK
-    private lateinit var preferensi: SharedPreferences
     private lateinit var pengelolaNotifikasi: NotificationManager
+    private val penanganUtama = Handler(Looper.getMainLooper())
+
+    // Tugas berkala setiap 6 jam untuk membersihkan screenshot usang (>30 hari)
+    private val tugasPembersihanBerkala = object : Runnable {
+        override fun run() {
+            PengelolaBrankas.sinkronkanAntreanDariPenyimpanan(applicationContext)
+            perbaruiTampilanNotifikasi()
+            penanganUtama.postDelayed(this, 6 * 60 * 60 * 1000L) // 6 Jam
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    // [FITUR: Inisialisasi Layanan] - Menyiapkan kanal notifikasi dan preferensi lokal
+    // [FITUR: Inisialisasi Layanan] - Menyiapkan kanal notifikasi sistem
     override fun onCreate() {
         super.onCreate()
-        preferensi = getSharedPreferences(NAMA_PREFERENSI, Context.MODE_PRIVATE)
-        durasiTimerMaksimalDetik = preferensi.getInt(KUNCI_DURASI_TIMER, DURASI_DEFAULT_DETIK)
-        sisaWaktuDetikSaatIni = durasiTimerMaksimalDetik
         pengelolaNotifikasi = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
         buatSaluranNotifikasi()
         Log.i(TAG, "Layanan Tangkapan Layar berhasil dibuat")
     }
 
-    // [FITUR: Perintah Memulai/Mengatur Layanan] - Menerima intent aksi dari Flutter UI
+    // [FITUR: Perintah Memulai/Menghentikan Layanan] - Menerima intent aksi dari Flutter UI
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val aksi = intent?.action ?: AKSI_MULAI
 
@@ -69,14 +63,7 @@ class LayananTangkapanLayar : Service() {
                 hentikanLayanan()
                 return START_NOT_STICKY
             }
-            AKSI_ATUR_DURASI -> {
-                val durasiBaru = intent?.getIntExtra(EKSTRA_DURASI_DETIK, DURASI_DEFAULT_DETIK) ?: DURASI_DEFAULT_DETIK
-                aturDurasiTimerDetik(durasiBaru)
-                return START_STICKY
-            }
             AKSI_MULAI -> {
-                val durasiKustom = intent?.getIntExtra(EKSTRA_DURASI_DETIK, durasiTimerMaksimalDetik) ?: durasiTimerMaksimalDetik
-                durasiTimerMaksimalDetik = durasiKustom
                 mulaiLayananLatarDepan()
             }
         }
@@ -88,13 +75,13 @@ class LayananTangkapanLayar : Service() {
     private fun mulaiLayananLatarDepan() {
         layananSedangBerjalan = true
 
-        val notifikasi = bangunNotifikasi("Layanan Aktif", "Memantau tangkapan layar otomatis...")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // Android 14 / 16 Foreground Service Special Use
-            startForeground(ID_NOTIFIKASI_FOREGROUND, notifikasi)
-        } else {
-            startForeground(ID_NOTIFIKASI_FOREGROUND, notifikasi)
-        }
+        val jumlahAwal = PengelolaBrankas.sinkronkanAntreanDariPenyimpanan(applicationContext).size
+        val notifikasi = bangunNotifikasi(
+            "Take & paste Aktif",
+            "$jumlahAwal Foto Tersimpan (Masa Simpan 30 Hari)"
+        )
+
+        startForeground(ID_NOTIFIKASI_FOREGROUND, notifikasi)
 
         // Daftarkan pengamat media MediaStore
         if (pengamatMedia == null) {
@@ -105,8 +92,7 @@ class LayananTangkapanLayar : Service() {
                     jalurScreenshot
                 )
                 if (butirBaru != null) {
-                    // Reset hitung mundur setiap kali ada screenshot baru masuk
-                    mulaiHitungMundur(durasiTimerMaksimalDetik)
+                    perbaruiTampilanNotifikasi()
                     MainActivity.kirimPeristiwaAntreanDiperbarui(PengelolaBrankas.dapatkanAntreanSebagaiPeta())
                 }
             }
@@ -118,69 +104,27 @@ class LayananTangkapanLayar : Service() {
             )
         }
 
-        // Tampilkan gelembung melayang mini
+        // Tampilkan gelembung melayang mini (ala Game Turbo dengan auto-hide)
         JendelaGelembungMelayang.tampilkanGelembung(applicationContext)
 
-        // Sinkronkan antrean lokal dan mulai hitung mundur
-        PengelolaBrankas.sinkronkanAntreanDariPenyimpanan(applicationContext)
-        mulaiHitungMundur(durasiTimerMaksimalDetik)
+        // Jadwalkan pembersihan berkala
+        penanganUtama.removeCallbacks(tugasPembersihanBerkala)
+        penanganUtama.postDelayed(tugasPembersihanBerkala, 6 * 60 * 60 * 1000L)
 
         MainActivity.kirimPeristiwaStatusLayanan(true)
     }
 
-    // [FITUR: Pengaturan Durasi Timer Kadaluarsa] - Memperbarui durasi kadaluarsa secara realtime dari Flutter
-    fun aturDurasiTimerDetik(detikBaru: Int) {
-        durasiTimerMaksimalDetik = if (detikBaru > 0) detikBaru else DURASI_DEFAULT_DETIK
-        preferensi.edit().putInt(KUNCI_DURASI_TIMER, durasiTimerMaksimalDetik).apply()
-        mulaiHitungMundur(durasiTimerMaksimalDetik)
-        Log.i(TAG, "Durasi timer diperbarui menjadi: $durasiTimerMaksimalDetik detik")
-    }
-
-    // [FITUR: Hitung Mundur Kadaluarsa Otomatis] - Menghitung sisa waktu sebelum brankas dibersihkan dan clipboard dikosongkan
-    private fun mulaiHitungMundur(detikAwal: Int) {
-        penghitungMundur?.cancel()
-        sisaWaktuDetikSaatIni = detikAwal
-
-        val totalMs = detikAwal * 1000L
-        penghitungMundur = object : CountDownTimer(totalMs, 1000L) {
-            override fun onTick(millisUntilFinished: Long) {
-                sisaWaktuDetikSaatIni = (millisUntilFinished / 1000L).toInt()
-                val jumlahAntrean = PengelolaBrankas.dapatkanDaftarAntreanSaatIni().size
-                val formatMenit = String.format("%02d:%02d", sisaWaktuDetikSaatIni / 60, sisaWaktuDetikSaatIni % 60)
-
-                // Perbarui notifikasi foreground
-                val teksNotifikasi = "Sisa Waktu: $formatMenit | $jumlahAntrean/10 Gambar Aktif"
-                perbaruiNotifikasi("Auto-Tempel Berjalan", teksNotifikasi)
-
-                // Beritahu Flutter UI
-                MainActivity.kirimPeristiwaDetikBerkurang(sisaWaktuDetikSaatIni)
-            }
-
-            override fun onFinish() {
-                sisaWaktuDetikSaatIni = 0
-                Log.i(TAG, "Timer kadaluarsa! Mengosongkan brankas dan papan klip...")
-
-                // [FITUR: Pembersihan Total Saat Kadaluarsa]
-                PengelolaBrankas.kosongkanBrankas(applicationContext)
-                MainActivity.kirimPeristiwaTimerKadaluarsa()
-
-                val formatMenitDefault = String.format("%02d:%02d", durasiTimerMaksimalDetik / 60, durasiTimerMaksimalDetik % 60)
-                perbaruiNotifikasi(
-                    "Brankas Dikosongkan",
-                    "Waktu habis ($formatMenitDefault). Siap memantau screenshot baru."
-                )
-
-                // Mulai ulang siklus timer baru dalam mode siaga
-                mulaiHitungMundur(durasiTimerMaksimalDetik)
-            }
-        }.start()
+    // [FITUR: Pembaruan Tampilan Notifikasi] - Memperbarui status jumlah foto aktif pada bilah notifikasi sistem
+    private fun perbaruiTampilanNotifikasi() {
+        val jumlahFoto = PengelolaBrankas.dapatkanDaftarAntreanSaatIni().size
+        val pesan = "$jumlahFoto Foto Tersimpan (Masa Simpan 30 Hari)"
+        perbaruiNotifikasi("Take & paste Berjalan", pesan)
     }
 
     // [FITUR: Hentikan Layanan] - Melepaskan semua listener, mematikan gelembung, dan membersihkan memori
     private fun hentikanLayanan() {
         layananSedangBerjalan = false
-        penghitungMundur?.cancel()
-        penghitungMundur = null
+        penanganUtama.removeCallbacks(tugasPembersihanBerkala)
 
         pengamatMedia?.let {
             try {
@@ -208,10 +152,10 @@ class LayananTangkapanLayar : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val saluran = NotificationChannel(
                 ID_SALURAN_NOTIFIKASI,
-                "Layanan Pemantauan Auto-Tempel",
+                "Layanan Pemantauan Take & paste",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Notifikasi status pemantauan screenshot dan hitung mundur kadaluarsa"
+                description = "Notifikasi status pemantauan screenshot brankas privat"
                 setShowBadge(false)
             }
             pengelolaNotifikasi.createNotificationChannel(saluran)
@@ -241,7 +185,7 @@ class LayananTangkapanLayar : Service() {
             .build()
     }
 
-    // [FITUR: Pembaruan Notifikasi Realtime] - Mengupdate isi teks notifikasi foreground
+    // [FITUR: Pembaruan Notifikasi Realtime] - Mengupdate teks notifikasi foreground
     private fun perbaruiNotifikasi(judul: String, pesan: String) {
         val notifikasi = bangunNotifikasi(judul, pesan)
         pengelolaNotifikasi.notify(ID_NOTIFIKASI_FOREGROUND, notifikasi)
