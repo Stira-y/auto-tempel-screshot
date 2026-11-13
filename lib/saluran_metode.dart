@@ -133,12 +133,58 @@ class SaluranPenghubungNative {
     }
   }
 
+  // [FITUR: Simpan Banyak Gambar Sekaligus ke Galeri Publik] - Mengekspor sejumlah foto terpilih ke Galeri sekaligus
+  static Future<int> simpanBanyakGambarKeGaleriPublik(List<String> daftarJalur) async {
+    try {
+      final jumlah = await _saluranMetode.invokeMethod<int>(
+        'simpanBanyakGambarKeGaleriPublik',
+        {'daftarJalur': daftarJalur},
+      );
+      return jumlah ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  // [FITUR: Hapus Banyak Gambar dari Brankas] - Menghapus sejumlah foto terpilih secara langsung dari brankas
+  static Future<int> hapusBanyakGambarDariAntrean(List<String> daftarJalur) async {
+    try {
+      final jumlah = await _saluranMetode.invokeMethod<int>(
+        'hapusBanyakGambarDariAntrean',
+        {'daftarJalur': daftarJalur},
+      );
+      return jumlah ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   // [FITUR: Deteksi Teks OCR Google Lens] - Mengekstrak teks dari berkas gambar 100% offline
   static Future<Map<String, dynamic>?> deteksiTeksDariGambar(String jalurBerkas) async {
     try {
       final hasil = await _saluranMetode.invokeMethod<Map<dynamic, dynamic>>(
         'deteksiTeksDariGambar',
         {'jalurBerkas': jalurBerkas},
+      );
+      if (hasil == null) return null;
+      return hasil.map((k, v) => MapEntry(k.toString(), v));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // [FITUR: Terjemahkan Teks On-Device Google Lens] - Menerjemahkan teks hasil scan ke bahasa target (default Indonesia)
+  static Future<Map<String, dynamic>?> terjemahkanTeks(
+    String teksSumber, {
+    String kodeBahasaTarget = 'id',
+  }) async {
+    try {
+      final hasil = await _saluranMetode.invokeMethod<Map<dynamic, dynamic>>(
+        'terjemahkanTeks',
+        {
+          'teksSumber': teksSumber,
+          'kodeBahasaTarget': kodeBahasaTarget,
+        },
       );
       if (hasil == null) return null;
       return hasil.map((k, v) => MapEntry(k.toString(), v));

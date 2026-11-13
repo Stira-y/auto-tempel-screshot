@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'komponen_kanvas_coret.dart';
 import 'komponen_pemotong_gambar.dart';
 import 'model_berkas_gambar.dart';
@@ -288,27 +289,41 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
             const Divider(color: Color(0xFF374151), height: 1),
             const SizedBox(height: 8),
 
-            // Tab Pemilih Mode Alat Utama
+            // Tab Pemilih Mode Alat Utama + Scan Teks & Terjemahan ala Google Lens
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _bangunTombolMode(
-                  ikon: Icons.brush,
-                  label: 'Coret',
-                  terpilih: _modeAktif == _ModeAlatEditor.coret,
-                  padaKetuk: () => setState(() => _modeAktif = _ModeAlatEditor.coret),
+                Expanded(
+                  child: _bangunTombolMode(
+                    ikon: Icons.rotate_right,
+                    label: 'Putar',
+                    terpilih: _modeAktif == _ModeAlatEditor.transformasi,
+                    padaKetuk: () => setState(() => _modeAktif = _ModeAlatEditor.transformasi),
+                  ),
                 ),
-                _bangunTombolMode(
-                  ikon: Icons.crop,
-                  label: 'Potong',
-                  terpilih: _modeAktif == _ModeAlatEditor.potong,
-                  padaKetuk: () => setState(() => _modeAktif = _ModeAlatEditor.potong),
+                Expanded(
+                  child: _bangunTombolMode(
+                    ikon: Icons.crop,
+                    label: 'Potong',
+                    terpilih: _modeAktif == _ModeAlatEditor.potong,
+                    padaKetuk: () => setState(() => _modeAktif = _ModeAlatEditor.potong),
+                  ),
                 ),
-                _bangunTombolMode(
-                  ikon: Icons.rotate_right,
-                  label: 'Putar & Mirror',
-                  terpilih: _modeAktif == _ModeAlatEditor.transformasi,
-                  padaKetuk: () => setState(() => _modeAktif = _ModeAlatEditor.transformasi),
+                Expanded(
+                  child: _bangunTombolMode(
+                    ikon: Icons.brush,
+                    label: 'Coret',
+                    terpilih: _modeAktif == _ModeAlatEditor.coret,
+                    padaKetuk: () => setState(() => _modeAktif = _ModeAlatEditor.coret),
+                  ),
+                ),
+                Expanded(
+                  child: _bangunTombolMode(
+                    ikon: Icons.translate,
+                    label: 'Scan & Terjemah',
+                    terpilih: false,
+                    padaKetuk: _bukaPanelScanTeksDanTerjemahan,
+                  ),
                 ),
               ],
             ),
@@ -318,57 +333,60 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
     );
   }
 
-  // [FITUR: Kontrol Transformasi Mirror & Rotasi Derajat] - Rotasi 90 derajat, slider putar derajat halus, dan cermin horizontal/vertikal
+  // [FITUR: Kontrol Transformasi Mirror & Rotasi Derajat ala Galeri Xiaomi] - Tombol mirror <|> di kiri, Setel ulang di tengah, dan tombol rotasi kotak+panah di kanan
   Widget _bangunKontrolTransformasi() {
+    final derajatKelipatan = _rotasiKelipatan90 * 90;
     return Column(
       children: [
-        // Baris Tombol Aksi Cepat
+        // Baris Aksi Utama ala Galeri Xiaomi: [<|>] Mirroring  |  Setel ulang  |  [Kotak+Panah] Rotasi 90°/180°/270°/360°
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Tombol Putar 90 Derajat
-            ElevatedButton.icon(
-              onPressed: () {
-                setState(() {
-                  _rotasiKelipatan90 = (_rotasiKelipatan90 + 1) % 4;
-                });
-              },
-              icon: const Icon(Icons.rotate_90_degrees_cw, size: 16),
-              label: Text('+90° (${_rotasiKelipatan90 * 90}°)'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF374151),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            // Tombol Mirroring dengan ikon <|> (panah kiri-kanan dengan garis vertikal tengah)
+            InkWell(
+              onTap: () => setState(() => _cerminHorizontal = !_cerminHorizontal),
+              onLongPress: () => setState(() => _cerminVertikal = !_cerminVertikal),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: (_cerminHorizontal || _cerminVertikal)
+                      ? const Color(0xFF3B82F6).withValues(alpha: 0.25)
+                      : const Color(0xFF374151),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: (_cerminHorizontal || _cerminVertikal)
+                        ? const Color(0xFF38BDF8)
+                        : Colors.transparent,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CustomPaint(
+                        painter: _PelukisIkonMirrorXiaomi(
+                          warna: (_cerminHorizontal || _cerminVertikal)
+                              ? const Color(0xFF38BDF8)
+                              : Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _cerminHorizontal ? 'Mirror H' : (_cerminVertikal ? 'Mirror V' : 'Mirror'),
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
               ),
             ),
 
-            // Tombol Mirror Horizontal
-            FilterChip(
-              label: const Text('Cermin H'),
-              selected: _cerminHorizontal,
-              avatar: const Icon(Icons.flip, size: 16, color: Colors.white),
-              selectedColor: const Color(0xFF3B82F6),
-              backgroundColor: const Color(0xFF374151),
-              labelStyle: const TextStyle(color: Colors.white, fontSize: 11),
-              onSelected: (val) => setState(() => _cerminHorizontal = val),
-            ),
-
-            // Tombol Mirror Vertikal
-            FilterChip(
-              label: const Text('Cermin V'),
-              selected: _cerminVertikal,
-              avatar: const Icon(Icons.swap_vert, size: 16, color: Colors.white),
-              selectedColor: const Color(0xFF3B82F6),
-              backgroundColor: const Color(0xFF374151),
-              labelStyle: const TextStyle(color: Colors.white, fontSize: 11),
-              onSelected: (val) => setState(() => _cerminVertikal = val),
-            ),
-
-            // Tombol Reset Transformasi
-            IconButton(
-              icon: const Icon(Icons.restart_alt, color: Colors.amberAccent),
-              tooltip: 'Reset Putar & Cermin',
-              onPressed: () {
+            // Tengah: Setel Ulang + Info Sudut
+            InkWell(
+              onTap: () {
                 setState(() {
                   _rotasiKelipatan90 = 0;
                   _sudutRotasiDerajat = 0.0;
@@ -376,6 +394,63 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
                   _cerminVertikal = false;
                 });
               },
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Column(
+                  children: [
+                    const Text(
+                      'Setel ulang',
+                      style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      '${derajatKelipatan == 0 ? 360 : derajatKelipatan}°',
+                      style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Tombol Rotasi dengan ikon kotak yang ada panahnya (90°, 180°, 270°, 360°)
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _rotasiKelipatan90 = (_rotasiKelipatan90 + 1) % 4;
+                });
+              },
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _rotasiKelipatan90 > 0
+                      ? const Color(0xFF3B82F6).withValues(alpha: 0.25)
+                      : const Color(0xFF374151),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: _rotasiKelipatan90 > 0 ? const Color(0xFF38BDF8) : Colors.transparent,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CustomPaint(
+                        painter: _PelukisIkonRotasiKotak(
+                          warna: _rotasiKelipatan90 > 0 ? const Color(0xFF38BDF8) : Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Putar ${derajatKelipatan == 0 ? 90 : derajatKelipatan}°',
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -385,7 +460,7 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
         // Slider Rotasi Derajat Bebas (-45° s/d +45°)
         Row(
           children: [
-            const Icon(Icons.screen_rotation_outlined, color: Colors.grey, size: 20),
+            const Icon(Icons.screen_rotation_outlined, color: Colors.grey, size: 18),
             Expanded(
               child: Slider(
                 value: _sudutRotasiDerajat,
@@ -398,10 +473,10 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
               ),
             ),
             SizedBox(
-              width: 50,
+              width: 46,
               child: Text(
                 '${_sudutRotasiDerajat.toStringAsFixed(1)}°',
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
               ),
             ),
           ],
@@ -536,7 +611,7 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
     );
   }
 
-  // [FITUR: Tombol Pemilih Mode Utama] - Beralih antara Coret dan Potong
+  // [FITUR: Tombol Pemilih Mode Utama] - Beralih antara Putar/Mirror, Potong, Coret, dan Scan & Terjemah
   Widget _bangunTombolMode({
     required IconData ikon,
     required String label,
@@ -547,7 +622,7 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
       onTap: padaKetuk,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         decoration: BoxDecoration(
           color: terpilih ? const Color(0xFF3B82F6).withValues(alpha: 0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
@@ -555,13 +630,17 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
             color: terpilih ? const Color(0xFF3B82F6) : Colors.transparent,
           ),
         ),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(ikon, color: terpilih ? const Color(0xFF60A5FA) : Colors.grey, size: 20),
-            const SizedBox(width: 8),
+            Icon(ikon, color: terpilih ? const Color(0xFF60A5FA) : Colors.grey, size: 19),
+            const SizedBox(height: 3),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
+                fontSize: 10,
                 color: terpilih ? const Color(0xFF60A5FA) : Colors.grey,
                 fontWeight: terpilih ? FontWeight.bold : FontWeight.normal,
               ),
@@ -569,6 +648,240 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
           ],
         ),
       ),
+    );
+  }
+
+  // [FITUR: Panel Scan Teks & Terjemahan ala Google Lens] - Memindai teks dari gambar lalu memilih huruf/kata atau menerjemahkannya secara on-device
+  Future<void> _bukaPanelScanTeksDanTerjemahan() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: Color(0xFF38BDF8)),
+      ),
+    );
+
+    final hasilOcr = await SaluranPenghubungNative.deteksiTeksDariGambar(
+      widget.berkasGambar.jalurBerkas,
+    );
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
+
+    final sukses = hasilOcr?['sukses'] == true;
+    final teksLengkap = hasilOcr?['teks']?.toString() ?? '';
+
+    if (!sukses || teksLengkap.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak ada teks yang terdeteksi pada gambar ini.')),
+      );
+      return;
+    }
+
+    String? hasilTerjemahan;
+    String bahasaTarget = 'id';
+    bool sedangMenerjemahkan = false;
+    String? pesanErrorTerjemahan;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF111827),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, perbaruiState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.document_scanner_outlined, color: Color(0xFF38BDF8), size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Scan Teks & Terjemahan',
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.grey),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Pilih teks secara manual pada kotak di bawah atau tekan tombol Terjemahan:',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        teksLengkap,
+                        style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: teksLengkap));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                backgroundColor: Color(0xFF10B981),
+                                content: Text('Seluruh teks asli berhasil disalin!'),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.copy, size: 15, color: Color(0xFF38BDF8)),
+                          label: const Text('Salin Teks', style: TextStyle(color: Colors.white, fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF334155)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: sedangMenerjemahkan
+                              ? null
+                              : () async {
+                                  perbaruiState(() {
+                                    sedangMenerjemahkan = true;
+                                    pesanErrorTerjemahan = null;
+                                  });
+                                  final res = await SaluranPenghubungNative.terjemahkanTeks(
+                                    teksLengkap,
+                                    kodeBahasaTarget: bahasaTarget,
+                                  );
+                                  perbaruiState(() {
+                                    sedangMenerjemahkan = false;
+                                    if (res?['sukses'] == true) {
+                                      hasilTerjemahan = res?['hasil']?.toString();
+                                    } else {
+                                      pesanErrorTerjemahan = res?['hasil']?.toString() ?? 'Gagal menerjemahkan teks';
+                                    }
+                                  });
+                                },
+                          icon: sedangMenerjemahkan
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : const Icon(Icons.translate, size: 16),
+                          label: Text(
+                            bahasaTarget == 'id' ? 'Terjemahan (ID)' : 'Terjemahan (EN)',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      InkWell(
+                        onTap: () {
+                          perbaruiState(() {
+                            bahasaTarget = bahasaTarget == 'id' ? 'en' : 'id';
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Text(
+                            bahasaTarget == 'id' ? 'ID' : 'EN',
+                            style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (pesanErrorTerjemahan != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      pesanErrorTerjemahan!,
+                      style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                    ),
+                  ],
+                  if (hasilTerjemahan != null) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Hasil Terjemahan:',
+                          style: TextStyle(color: Color(0xFF4ADE80), fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: hasilTerjemahan!));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                backgroundColor: Color(0xFF10B981),
+                                content: Text('Hasil terjemahan disalin!'),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.copy, size: 14, color: Color(0xFF4ADE80)),
+                          label: const Text('Salin', style: TextStyle(color: Color(0xFF4ADE80), fontSize: 12)),
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 160),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF064E3B).withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF10B981)),
+                      ),
+                      child: SingleChildScrollView(
+                        child: SelectableText(
+                          hasilTerjemahan!,
+                          style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -731,4 +1044,90 @@ class _LayarEditorGambarState extends State<LayarEditorGambar> {
       }
     }
   }
+}
+
+// [FITUR: Pelukis Ikon Mirror <|> ala Galeri Xiaomi] - Menggambar panah kiri-kanan dengan garis vertikal di tengah
+class _PelukisIkonMirrorXiaomi extends CustomPainter {
+  final Color warna;
+
+  _PelukisIkonMirrorXiaomi({required this.warna});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final kuasGaris = Paint()
+      ..color = warna
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final kuasIsi = Paint()
+      ..color = warna
+      ..style = PaintingStyle.fill;
+
+    final tengahX = size.width / 2;
+    // Garis pemisah vertikal di tengah
+    canvas.drawLine(
+      Offset(tengahX, size.height * 0.16),
+      Offset(tengahX, size.height * 0.84),
+      kuasGaris,
+    );
+
+    // Segitiga kiri (<)
+    final panahKiri = Path()
+      ..moveTo(size.width * 0.12, size.height * 0.5)
+      ..lineTo(size.width * 0.34, size.height * 0.33)
+      ..lineTo(size.width * 0.34, size.height * 0.67)
+      ..close();
+    canvas.drawPath(panahKiri, kuasIsi);
+
+    // Segitiga kanan (>)
+    final panahKanan = Path()
+      ..moveTo(size.width * 0.88, size.height * 0.5)
+      ..lineTo(size.width * 0.66, size.height * 0.33)
+      ..lineTo(size.width * 0.66, size.height * 0.67)
+      ..close();
+    canvas.drawPath(panahKanan, kuasIsi);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PelukisIkonMirrorXiaomi oldDelegate) => oldDelegate.warna != warna;
+}
+
+// [FITUR: Pelukis Ikon Rotasi Kotak dengan Panah Melengkung ala Galeri Xiaomi]
+class _PelukisIkonRotasiKotak extends CustomPainter {
+  final Color warna;
+
+  _PelukisIkonRotasiKotak({required this.warna});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final kuas = Paint()
+      ..color = warna
+      ..strokeWidth = 1.9
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    // Kotak persegi sudut membulat di kiri bawah
+    final kotak = RRect.fromRectAndRadius(
+      Rect.fromLTWH(size.width * 0.15, size.height * 0.30, size.width * 0.55, size.height * 0.55),
+      const Radius.circular(4),
+    );
+    canvas.drawRRect(kotak, kuas);
+
+    // Panah melengkung di pojok kanan atas
+    final busur = Path()
+      ..moveTo(size.width * 0.52, size.height * 0.14)
+      ..quadraticBezierTo(size.width * 0.84, size.height * 0.12, size.width * 0.84, size.height * 0.44);
+    canvas.drawPath(busur, kuas);
+
+    // Ujung kepala panah menghadap ke bawah
+    final ujungPanah = Path()
+      ..moveTo(size.width * 0.74, size.height * 0.36)
+      ..lineTo(size.width * 0.84, size.height * 0.46)
+      ..lineTo(size.width * 0.92, size.height * 0.36);
+    canvas.drawPath(ujungPanah, kuas);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PelukisIkonRotasiKotak oldDelegate) => oldDelegate.warna != warna;
 }

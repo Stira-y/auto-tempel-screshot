@@ -463,6 +463,55 @@ object PengelolaBrankas {
         }
     }
 
+    // [FITUR: Simpan Banyak Gambar Sekaligus ke Galeri Publik] - Mengekspor sejumlah foto pilihan ke Galeri (Pictures/AutoTempelEdit)
+    fun simpanBanyakGambarKeGaleriPublik(
+        konteks: Context,
+        daftarJalur: List<String>,
+        tampilkanNotifikasi: Boolean = true
+    ): Int {
+        var jumlahBerhasil = 0
+        val stempelWaktu = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        for ((indeks, jalur) in daftarJalur.withIndex()) {
+            val berkas = File(jalur)
+            if (!berkas.exists()) continue
+            try {
+                val dataByte = berkas.readBytes()
+                val namaBerkasSimpan = "AutoTempel_${stempelWaktu}_${indeks + 1}_${berkas.name}"
+                val uriHasil = simpanHasilEditKeGaleri(konteks, dataByte, namaBerkasSimpan)
+                if (uriHasil != null) {
+                    jumlahBerhasil++
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Gagal menyimpan gambar ke galeri ($jalur): ${e.message}")
+            }
+        }
+        if (tampilkanNotifikasi && jumlahBerhasil > 0) {
+            penanganUtama.post {
+                Toast.makeText(konteks, "$jumlahBerhasil foto berhasil disimpan ke galeri!", Toast.LENGTH_SHORT).show()
+            }
+        }
+        return jumlahBerhasil
+    }
+
+    // [FITUR: Hapus Banyak Gambar dari Brankas] - Menghapus beberapa foto terpilih secara langsung dari brankas privat
+    fun hapusBanyakGambarDariAntrean(konteks: Context, daftarJalur: List<String>): Int {
+        var jumlahTerhapus = 0
+        synchronized(daftarAntrean) {
+            for (jalur in daftarJalur) {
+                val berkas = File(jalur)
+                if (berkas.exists()) {
+                    berkas.delete()
+                }
+                val terhapusDariList = daftarAntrean.removeAll { it.jalurBerkas == jalur }
+                if (terhapusDariList || !berkas.exists()) {
+                    jumlahTerhapus++
+                }
+            }
+        }
+        beriTahuPerubahanAntrean()
+        return jumlahTerhapus
+    }
+
     // [FITUR: Bagikan Seluruh Antrean (Multi-Share)] - Membagikan seluruh gambar sekaligus ke WhatsApp/aplikasi lain
     fun bagikanSemuaAntrean(konteks: Context): Boolean {
         val antrean = dapatkanDaftarAntreanSaatIni()

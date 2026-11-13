@@ -27,6 +27,7 @@ class MainActivity : FlutterActivity() {
         private const val SALURAN_PERISTIWA_STREAM = "com.example.apk_auto_tempel_srcht/saluran_peristiwa"
 
         private var pemancarPeristiwa: EventChannel.EventSink? = null
+        private var jalurEditTertunda: String? = null
         private val penanganUtama = Handler(Looper.getMainLooper())
 
         // [FITUR: Pemancar Peristiwa ke Flutter UI]
@@ -53,13 +54,21 @@ class MainActivity : FlutterActivity() {
         }
 
         fun kirimPeristiwaBukaEditor(jalurBerkas: String) {
+            if (pemancarPeristiwa == null) {
+                jalurEditTertunda = jalurBerkas
+                return
+            }
             penanganUtama.postDelayed({
-                pemancarPeristiwa?.success(
-                    mapOf(
-                        "jenis" to "buka_editor",
-                        "jalurBerkas" to jalurBerkas
+                if (pemancarPeristiwa != null) {
+                    pemancarPeristiwa?.success(
+                        mapOf(
+                            "jenis" to "buka_editor",
+                            "jalurBerkas" to jalurBerkas
+                        )
                     )
-                )
+                } else {
+                    jalurEditTertunda = jalurBerkas
+                }
             }, 300)
         }
     }
@@ -142,6 +151,16 @@ class MainActivity : FlutterActivity() {
                         val sukses = PengelolaBrankas.simpanGambarKeGaleriPublik(this, jalurBerkas)
                         hasil.success(sukses)
                     }
+                    "simpanBanyakGambarKeGaleriPublik" -> {
+                        val daftarJalur = panggilan.argument<List<String>>("daftarJalur") ?: emptyList()
+                        val jumlah = PengelolaBrankas.simpanBanyakGambarKeGaleriPublik(this, daftarJalur)
+                        hasil.success(jumlah)
+                    }
+                    "hapusBanyakGambarDariAntrean" -> {
+                        val daftarJalur = panggilan.argument<List<String>>("daftarJalur") ?: emptyList()
+                        val jumlah = PengelolaBrankas.hapusBanyakGambarDariAntrean(this, daftarJalur)
+                        hasil.success(jumlah)
+                    }
                     "deteksiTeksDariGambar" -> {
                         val jalurBerkas = panggilan.argument<String>("jalurBerkas") ?: ""
                         PengenalTeksOcr.deteksiTeksDariBerkas(this, jalurBerkas) { sukses, teksLengkap, daftarBaris ->
@@ -150,6 +169,19 @@ class MainActivity : FlutterActivity() {
                                     "sukses" to sukses,
                                     "teks" to teksLengkap,
                                     "daftarBaris" to daftarBaris
+                                )
+                            )
+                        }
+                    }
+                    "terjemahkanTeks" -> {
+                        val teksSumber = panggilan.argument<String>("teksSumber") ?: ""
+                        val kodeBahasaTarget = panggilan.argument<String>("kodeBahasaTarget") ?: "id"
+                        PengenalTeksOcr.terjemahkanTeks(teksSumber, kodeBahasaTarget) { sukses, hasilTeks, bahasaTerdeteksi ->
+                            hasil.success(
+                                mapOf(
+                                    "sukses" to sukses,
+                                    "hasil" to hasilTeks,
+                                    "bahasaTerdeteksi" to bahasaTerdeteksi
                                 )
                             )
                         }
@@ -199,6 +231,12 @@ class MainActivity : FlutterActivity() {
                     pemancarPeristiwa = events
                     kirimPeristiwaStatusLayanan(LayananTangkapanLayar.layananSedangBerjalan)
                     kirimPeristiwaAntreanDiperbarui(PengelolaBrankas.dapatkanAntreanSebagaiPeta())
+
+                    val tertunda = jalurEditTertunda
+                    if (!tertunda.isNullOrEmpty()) {
+                        jalurEditTertunda = null
+                        kirimPeristiwaBukaEditor(tertunda)
+                    }
 
                     PengelolaBrankas.aturPendengarPerubahan { antrean ->
                         kirimPeristiwaAntreanDiperbarui(PengelolaBrankas.dapatkanAntreanSebagaiPeta())

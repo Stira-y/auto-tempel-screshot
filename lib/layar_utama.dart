@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'layar_editor_gambar.dart';
 import 'layanan_pembaruan_github.dart';
 import 'model_berkas_gambar.dart';
@@ -13,6 +12,13 @@ class LayarUtama extends StatefulWidget {
 
   @override
   State<LayarUtama> createState() => _LayarUtamaState();
+}
+
+enum _ModePilihUtama {
+  tidakAda,
+  pilihUntukSalin,
+  simpanBanyak,
+  kelolaBanyak,
 }
 
 class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
@@ -33,7 +39,7 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
   bool _sedangMemuatAntrean = true;
 
   // [FITUR: Status Pemilihan Banyak Gambar]
-  bool _modePilihBeberapa = false;
+  _ModePilihUtama _modePilih = _ModePilihUtama.tidakAda;
   final Set<String> _kumpulanJalurTerpilih = {};
 
   // Status Pembaruan GitHub
@@ -649,6 +655,8 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
 
   // [FITUR: Bagian Daftar Antrean Brankas Tanpa Batas]
   Widget _bangunBagianDaftarAntrean() {
+    final dalamModePilih = _modePilih != _ModePilihUtama.tidakAda;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -665,116 +673,195 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
                 ),
               ],
             ),
-            Row(
-              children: [
-                if (_daftarAntreanBrankas.isNotEmpty) ...[
-                  // Tombol Pilih Beberapa / Batal Pilih
+            if (_daftarAntreanBrankas.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.delete_sweep, color: Color(0xFFF43F5E), size: 20),
+                tooltip: 'Kosongkan Seluruh Brankas',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: _konfirmasiKosongkanBrankas,
+              ),
+          ],
+        ),
+        if (_daftarAntreanBrankas.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              // [FITUR: Tombol Pilih untuk Salin] - Klik -> tampil checkbox -> klik 1 gambar langsung salin & tutup
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _modePilih = _modePilih == _ModePilihUtama.pilihUntukSalin
+                        ? _ModePilihUtama.tidakAda
+                        : _ModePilihUtama.pilihUntukSalin;
+                    _kumpulanJalurTerpilih.clear();
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _modePilih == _ModePilihUtama.pilihUntukSalin
+                      ? const Color(0xFF7F1D1D)
+                      : const Color(0xFF1E3A8A),
+                  foregroundColor: _modePilih == _ModePilihUtama.pilihUntukSalin
+                      ? const Color(0xFFFCA5A5)
+                      : const Color(0xFF93C5FD),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  _modePilih == _ModePilihUtama.pilihUntukSalin ? 'Batal Pilih' : 'Pilih untuk Salin',
+                  style: const TextStyle(fontSize: 11),
+                ),
+              ),
+
+              // [FITUR: Tombol Simpan Banyak] - Memilih >1 gambar untuk disimpan ke Galeri sekaligus
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _modePilih = _modePilih == _ModePilihUtama.simpanBanyak
+                        ? _ModePilihUtama.tidakAda
+                        : _ModePilihUtama.simpanBanyak;
+                    _kumpulanJalurTerpilih.clear();
+                  });
+                },
+                icon: const Icon(Icons.save_alt, size: 12),
+                label: Text(
+                  _modePilih == _ModePilihUtama.simpanBanyak ? 'Batal Simpan' : 'Simpan Banyak',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _modePilih == _ModePilihUtama.simpanBanyak
+                      ? const Color(0xFF78350F)
+                      : const Color(0xFF064E3B),
+                  foregroundColor: _modePilih == _ModePilihUtama.simpanBanyak
+                      ? const Color(0xFFFDE68A)
+                      : const Color(0xFF6EE7B7),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+
+              // Tombol Kirim Semua (saat tidak di mode kelola/simpan banyak)
+              if (!dalamModePilih)
+                ElevatedButton.icon(
+                  onPressed: SaluranPenghubungNative.bagikanSemuaAntrean,
+                  icon: const Icon(Icons.share, size: 13),
+                  label: const Text('Kirim Semua', style: TextStyle(fontSize: 11)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+
+              // Tombol aksi untuk Simpan Banyak atau Kelola Banyak (hasil Tekan Lama)
+              if (_modePilih == _ModePilihUtama.simpanBanyak || _modePilih == _ModePilihUtama.kelolaBanyak) ...[
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    if (_kumpulanJalurTerpilih.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Pilih minimal 1 gambar terlebih dahulu')),
+                      );
+                      return;
+                    }
+                    final jumlah = await SaluranPenghubungNative.simpanBanyakGambarKeGaleriPublik(
+                      _kumpulanJalurTerpilih.toList(),
+                    );
+                    if (mounted) {
+                      setState(() {
+                        _modePilih = _ModePilihUtama.tidakAda;
+                        _kumpulanJalurTerpilih.clear();
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: const Color(0xFF10B981),
+                          content: Text('$jumlah foto berhasil disimpan ke Galeri!'),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.download_done, size: 12),
+                  label: Text(
+                    _kumpulanJalurTerpilih.isEmpty
+                        ? 'Simpan ke Galeri'
+                        : 'Simpan (${_kumpulanJalurTerpilih.length})',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+                if (_modePilih == _ModePilihUtama.kelolaBanyak) ...[
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      if (_kumpulanJalurTerpilih.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Pilih minimal 1 gambar terlebih dahulu')),
+                        );
+                        return;
+                      }
+                      final jumlah = await SaluranPenghubungNative.hapusBanyakGambarDariAntrean(
+                        _kumpulanJalurTerpilih.toList(),
+                      );
+                      if (mounted) {
+                        setState(() {
+                          _modePilih = _ModePilihUtama.tidakAda;
+                          _kumpulanJalurTerpilih.clear();
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: const Color(0xFFF43F5E),
+                            content: Text('$jumlah foto dihapus dari brankas.'),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.delete_outline, size: 12),
+                    label: Text(
+                      _kumpulanJalurTerpilih.isEmpty
+                          ? 'Hapus'
+                          : 'Hapus (${_kumpulanJalurTerpilih.length})',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFF43F5E),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
                   ElevatedButton(
                     onPressed: () {
                       setState(() {
-                        _modePilihBeberapa = !_modePilihBeberapa;
+                        _modePilih = _ModePilihUtama.tidakAda;
                         _kumpulanJalurTerpilih.clear();
                       });
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _modePilihBeberapa ? const Color(0xFF7F1D1D) : const Color(0xFF1E3A8A),
-                      foregroundColor: _modePilihBeberapa ? const Color(0xFFFCA5A5) : const Color(0xFF93C5FD),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      backgroundColor: const Color(0xFF334155),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: Text(_modePilihBeberapa ? 'Batal Pilih' : 'Pilih Beberapa', style: const TextStyle(fontSize: 11)),
-                  ),
-                  const SizedBox(width: 6),
-
-                  // Tombol Salin Terpilih (jika dalam mode pilih beberapa)
-                  if (_modePilihBeberapa) ...[
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        if (_kumpulanJalurTerpilih.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Pilih minimal 1 gambar terlebih dahulu')),
-                          );
-                          return;
-                        }
-                        final sukses = await SaluranPenghubungNative.salinBanyakGambarKePapanKlip(_kumpulanJalurTerpilih.toList());
-                        if (sukses && mounted) {
-                          final jumlah = _kumpulanJalurTerpilih.length;
-                          setState(() {
-                            _modePilihBeberapa = false;
-                            _kumpulanJalurTerpilih.clear();
-                          });
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: const Color(0xFF10B981),
-                              content: Text('$jumlah foto berhasil disalin ke clipboard!'),
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.copy, size: 12),
-                      label: Text(
-                        _kumpulanJalurTerpilih.isEmpty ? 'Salin' : 'Salin (${_kumpulanJalurTerpilih.length})',
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    ElevatedButton.icon(
-                      onPressed: () async {
-                        if (_kumpulanJalurTerpilih.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Pilih minimal 1 gambar terlebih dahulu')),
-                          );
-                          return;
-                        }
-                        await SaluranPenghubungNative.bagikanBanyakGambar(_kumpulanJalurTerpilih.toList());
-                      },
-                      icon: const Icon(Icons.share, size: 12),
-                      label: Text(
-                        _kumpulanJalurTerpilih.isEmpty ? 'Kirim' : 'Kirim (${_kumpulanJalurTerpilih.length})',
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                  ] else
-                    ElevatedButton.icon(
-                      onPressed: SaluranPenghubungNative.bagikanSemuaAntrean,
-                      icon: const Icon(Icons.share, size: 14),
-                      label: const Text('Kirim Semua', style: TextStyle(fontSize: 11)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF10B981),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                  const SizedBox(width: 6),
-                  IconButton(
-                    icon: const Icon(Icons.delete_sweep, color: Color(0xFFF43F5E), size: 20),
-                    tooltip: 'Kosongkan Seluruh Brankas',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: _konfirmasiKosongkanBrankas,
+                    child: const Text('Batal', style: TextStyle(fontSize: 11)),
                   ),
                 ],
               ],
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
         const SizedBox(height: 10),
 
         if (_sedangMemuatAntrean)
@@ -831,9 +918,10 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
     );
   }
 
-  // [FITUR: Kartu Thumbnail Screenshot Interaktif] - Checkbox pojok kiri atas (mode pilih), klik 2 kali buka pratinjau foto jelas di pop up, tekan lama menu pop up simpan & edit
+  // [FITUR: Kartu Thumbnail Screenshot Interaktif] - Checkbox pojok kiri atas (mode pilih), klik 2 kali langsung ke menu edit, tekan lama munculkan checkbox kelola banyak
   Widget _bangunKartuThumbnail(ModelBerkasGambar butir) {
     final terpilih = _kumpulanJalurTerpilih.contains(butir.jalurBerkas);
+    final dalamModePilih = _modePilih != _ModePilihUtama.tidakAda;
 
     return Container(
       decoration: BoxDecoration(
@@ -850,8 +938,26 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
         children: [
           Expanded(
             child: GestureDetector(
-              onTap: () {
-                if (_modePilihBeberapa) {
+              onTap: () async {
+                if (_modePilih == _ModePilihUtama.pilihUntukSalin) {
+                  // Begitu klik 1 gambar -> langsung salin + notif + tutup checkbox
+                  final sukses = await SaluranPenghubungNative.salinGambarKePapanKlip(butir.jalurBerkas);
+                  if (mounted) {
+                    setState(() {
+                      _modePilih = _ModePilihUtama.tidakAda;
+                      _kumpulanJalurTerpilih.clear();
+                    });
+                    if (sukses) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          backgroundColor: Color(0xFF10B981),
+                          content: Text('Image berhasil disalin'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  }
+                } else if (_modePilih == _ModePilihUtama.simpanBanyak || _modePilih == _ModePilihUtama.kelolaBanyak) {
                   setState(() {
                     if (terpilih) {
                       _kumpulanJalurTerpilih.remove(butir.jalurBerkas);
@@ -863,13 +969,16 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
                   _bukaLayarEditor(butir);
                 }
               },
-              // [FITUR: Klik 2 Kali (Double Tap) -> Perlihatkan Foto dengan Jelas + Pilih Teks Google Lens]
+              // [FITUR: Klik 2 Kali (Double Tap) -> Langsung ke Menu Edit di Aplikasi Sesuai Gambar yang Diklik]
               onDoubleTap: () {
-                _tampilkanPratinjauFotoJelas(butir);
+                _bukaLayarEditor(butir);
               },
-              // [FITUR: Tekan Lama (Long Press) -> Pop Up Simpan ke Galeri & Edit]
+              // [FITUR: Tekan Lama (Long Press) -> Munculkan Checkbox di Semua Foto untuk Simpan ke Galeri atau Hapus]
               onLongPress: () {
-                _tampilkanDialogOpsiFoto(butir);
+                setState(() {
+                  _modePilih = _ModePilihUtama.kelolaBanyak;
+                  _kumpulanJalurTerpilih.add(butir.jalurBerkas);
+                });
               },
               child: Stack(
                 fit: StackFit.expand,
@@ -882,8 +991,8 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
                     ),
                   ),
 
-                  // [FITUR: Checkbox di Pojok Kiri Atas] - Muncul saat mode pilih beberapa aktif, default non-aktif
-                  if (_modePilihBeberapa)
+                  // [FITUR: Checkbox di Pojok Kiri Atas] - Muncul saat mode pilih aktif
+                  if (dalamModePilih)
                     Positioned(
                       top: 6,
                       left: 6,
@@ -984,292 +1093,6 @@ class _LayarUtamaState extends State<LayarUtama> with WidgetsBindingObserver {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // [FITUR: Dialog Opsi Foto saat Tekan Lama] - Simpan ke galeri atau buka editor
-  void _tampilkanDialogOpsiFoto(ModelBerkasGambar butir) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (konteks) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade600,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                butir.namaBerkas,
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: const Icon(Icons.save_alt, color: Color(0xFF10B981)),
-                title: const Text('Simpan ke Galeri', style: TextStyle(color: Colors.white)),
-                subtitle: const Text('Ekspor langsung ke Pictures/AutoTempelEdit', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                onTap: () async {
-                  Navigator.of(konteks).pop();
-                  final sukses = await SaluranPenghubungNative.simpanGambarKeGaleriPublik(butir.jalurBerkas);
-                  if (sukses && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Color(0xFF10B981),
-                        content: Text('Foto berhasil disimpan ke galeri!'),
-                      ),
-                    );
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.edit, color: Color(0xFF38BDF8)),
-                title: const Text('Edit Gambar', style: TextStyle(color: Colors.white)),
-                subtitle: const Text('Crop, coret, mirror, dan putar derajat', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                onTap: () {
-                  Navigator.of(konteks).pop();
-                  _bukaLayarEditor(butir);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // [FITUR: Pratinjau Foto Jelas & Pilih Teks Google Lens] - Tekan 2x memunculkan foto resolusi penuh + tombol Pilih Teks OCR
-  void _tampilkanPratinjauFotoJelas(ModelBerkasGambar butir) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.92),
-      builder: (konteks) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.zero,
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            backgroundColor: const Color(0xFF1E293B).withValues(alpha: 0.9),
-            elevation: 0,
-            leading: IconButton(
-              icon: const Icon(Icons.close, color: Colors.white),
-              onPressed: () => Navigator.of(konteks).pop(),
-            ),
-            title: Text(
-              butir.namaBerkas,
-              style: const TextStyle(fontSize: 14, color: Colors.white),
-              overflow: TextOverflow.ellipsis,
-            ),
-            actions: [
-              // Tombol Pilih Teks (Google Lens)
-              Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: ElevatedButton.icon(
-                  onPressed: () => _jalankanDeteksiTeksOcr(butir),
-                  icon: const Icon(Icons.document_scanner, size: 16),
-                  label: const Text('Pilih Teks', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                ),
-              ),
-              // Tombol Salin Gambar
-              IconButton(
-                icon: const Icon(Icons.copy, color: Color(0xFF38BDF8), size: 20),
-                tooltip: 'Salin ke Clipboard',
-                onPressed: () async {
-                  final sukses = await SaluranPenghubungNative.salinGambarKePapanKlip(butir.jalurBerkas);
-                  if (sukses && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Color(0xFF10B981),
-                        content: Text('Foto berhasil disalin ke clipboard!'),
-                      ),
-                    );
-                  }
-                },
-              ),
-              // Tombol Simpan ke Galeri
-              IconButton(
-                icon: const Icon(Icons.save_alt, color: Color(0xFF10B981), size: 20),
-                tooltip: 'Simpan ke Galeri',
-                onPressed: () async {
-                  final sukses = await SaluranPenghubungNative.simpanGambarKeGaleriPublik(butir.jalurBerkas);
-                  if (sukses && mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        backgroundColor: Color(0xFF10B981),
-                        content: Text('Foto berhasil disimpan ke galeri!'),
-                      ),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-          body: Center(
-            child: InteractiveViewer(
-              panEnabled: true,
-              boundaryMargin: const EdgeInsets.all(20),
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: Image.file(
-                File(butir.jalurBerkas),
-                fit: BoxFit.contain,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // [FITUR: Deteksi Teks OCR Google Lens] - Mengekstrak teks dari screenshot secara offline dan menyajikannya dalam tampilan selectable
-  Future<void> _jalankanDeteksiTeksOcr(ModelBerkasGambar butir) async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(
-        child: Card(
-          color: Color(0xFF1E293B),
-          child: Padding(
-            padding: EdgeInsets.all(20.0),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircularProgressIndicator(color: Color(0xFF38BDF8)),
-                SizedBox(width: 16),
-                Text('Mendeteksi teks dengan Google Lens...', style: TextStyle(color: Colors.white)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    final hasilOcr = await SaluranPenghubungNative.deteksiTeksDariGambar(butir.jalurBerkas);
-
-    if (mounted) {
-      Navigator.of(context).pop(); // Tutup loading dialog
-
-      final sukses = hasilOcr?['sukses'] == true;
-      final teks = (hasilOcr?['teks'] as String? ?? '').trim();
-
-      if (sukses && teks.isNotEmpty) {
-        _tampilkanModalTeksTerdeteksi(teks);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Tidak ada teks yang terdeteksi pada gambar ini'),
-          ),
-        );
-      }
-    }
-  }
-
-  // [FITUR: Modal Teks Terdeteksi ala Google Lens] - Pengguna bisa memilih per huruf/kata dan menyalinnya
-  void _tampilkanModalTeksTerdeteksi(String teks) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (konteks) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: MediaQuery.of(konteks).viewInsets.bottom + 16,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.document_scanner, color: Color(0xFF38BDF8), size: 20),
-                      SizedBox(width: 8),
-                      Text(
-                        'Teks Terdeteksi (Google Lens)',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.grey),
-                    onPressed: () => Navigator.of(konteks).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Tekan dan tahan pada teks di bawah untuk memilih huruf/kata tertentu, atau ketuk tombol untuk menyalin semua:',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 220),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFF334155)),
-                ),
-                child: SingleChildScrollView(
-                  child: SelectableText(
-                    teks,
-                    style: const TextStyle(fontSize: 13, color: Color(0xFFE2E8F0), height: 1.4),
-                    showCursor: true,
-                    cursorColor: const Color(0xFF38BDF8),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: teks));
-                  Navigator.of(konteks).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      backgroundColor: Color(0xFF10B981),
-                      content: Text('Seluruh teks berhasil disalin ke clipboard!'),
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.copy, size: 16),
-                label: const Text('Salin Semua Teks'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF10B981),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
